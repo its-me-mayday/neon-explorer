@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neon Explorer 3D</title>
+    <style>
+      body { margin: 0; overflow: hidden; background: #000; font-family: 'Inter', sans-serif; }
+      #app { width: 100vw; height: 100vh; }
+      #ui {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        color: #0ff;
+        pointer-events: none;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        text-shadow: 0 0 10px #0ff;
+      }
+      .controls {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        color: rgba(0, 255, 255, 0.5);
+        font-size: 0.8rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="ui">
+      <h1>Neon Explorer</h1>
+      <p>Status: Online</p>
+    </div>
+    <div class="controls">
+      WASD / ARROWS TO MOVE
+    </div>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>
