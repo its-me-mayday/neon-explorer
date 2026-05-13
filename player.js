@@ -10,7 +10,38 @@ export class Player {
     this.darkSteelMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 1.0, roughness: 0.3 });
     this.softGlowMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.8 });
 
-    // 1. FUSOLIERA
+    // COSTRUZIONE NAVE (Modello Wraith Interceptor)
+    this.buildShip();
+    
+    this.mesh.position.y = 1;
+    this.scene.add(this.mesh);
+
+    // MOVIMENTO & TURBO
+    this.velocity = new THREE.Vector3();
+    this.rotationSpeed = 3.8;
+    this.baseAcceleration = 50;
+    this.turboAcceleration = 140;
+    this.deceleration = 0.96;
+    this.isTurbo = false;
+    this.turboEnergy = 100;
+
+    // SCIE (Trails)
+    this.trails = [];
+    this.trailTimer = 0;
+
+    this.keys = { forward: false, backward: false, left: false, right: false, boost: false };
+    window.addEventListener('keydown', (e) => this.onKeyDown(e));
+    window.addEventListener('keyup', (e) => this.onKeyUp(e));
+
+    // UI
+    this.speedDisplay = document.getElementById('speed-display');
+    this.turboFill = document.getElementById('turbo-fill');
+
+    // AUDIO
+    this.setupAudio();
+  }
+
+  buildShip() {
     const noseGeo = new THREE.ConeGeometry(0.3, 1.5, 4);
     const nose = new THREE.Mesh(noseGeo, this.steelMat);
     nose.rotation.x = Math.PI / 2; nose.position.z = 1.2;
@@ -25,7 +56,6 @@ export class Player {
     back.position.z = -0.8;
     this.mesh.add(back);
 
-    // 2. COCKPIT
     const cockpitGeo = new THREE.SphereGeometry(0.35, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2);
     const cockpitMat = new THREE.MeshStandardMaterial({ color: 0x001111, emissive: 0x00ffff, emissiveIntensity: 0.5, transparent: true, opacity: 0.7 });
     this.cockpit = new THREE.Mesh(cockpitGeo, cockpitMat);
@@ -33,7 +63,6 @@ export class Player {
     this.cockpit.scale.set(1, 0.6, 1.5);
     this.mesh.add(this.cockpit);
 
-    // 3. ALI
     const wingShape = new THREE.Shape();
     wingShape.moveTo(0, 0); wingShape.lineTo(2.2, -1.2); wingShape.lineTo(2.2, 0.6); wingShape.lineTo(0, 1.2); wingShape.lineTo(0, 0);
     const extrudeSettings = { depth: 0.08, bevelEnabled: true, bevelThickness: 0.05 };
@@ -49,42 +78,45 @@ export class Player {
     rightWing.position.x = 0.3;
     this.mesh.add(rightWing);
 
-    // 4. MOTORI
     this.engines = [];
     const engineGeo = new THREE.CylinderGeometry(0.18, 0.25, 0.9, 16);
-    const positions = [{x:-0.6,y:-0.15,z:-1},{x:0.6,y:-0.15,z:-1},{x:-1.3,y:-0.1,z:-0.3},{x:1.3,y:-0.1,z:-0.3}];
-    positions.forEach(pos => {
+    this.enginePositions = [{x:-0.6,y:-0.15,z:-1},{x:0.6,y:-0.15,z:-1},{x:-1.3,y:-0.1,z:-0.3},{x:1.3,y:-0.1,z:-0.3}];
+    this.enginePositions.forEach(pos => {
       const engine = new THREE.Mesh(engineGeo, this.darkSteelMat);
       engine.rotation.x = Math.PI / 2;
       engine.position.set(pos.x, pos.y, pos.z);
       this.mesh.add(engine);
 
       const eGlowGeo = new THREE.SphereGeometry(0.15, 12, 12);
-      const eGlow = new THREE.Mesh(eGlowGeo, this.softGlowMat.clone()); // Clonato per controllo individuale
+      const eGlow = new THREE.Mesh(eGlowGeo, this.softGlowMat.clone());
       eGlow.position.set(pos.x, pos.y, pos.z - 0.5);
       this.mesh.add(eGlow);
       this.engines.push(eGlow);
     });
+  }
 
-    this.mesh.position.y = 1;
-    this.scene.add(this.mesh);
+  setupAudio() {
+    this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    this.oscillator = this.audioCtx.createOscillator();
+    this.gainNode = this.audioCtx.createGain();
+    
+    this.oscillator.type = 'sawtooth';
+    this.oscillator.frequency.setValueAtTime(40, this.audioCtx.currentTime);
+    this.gainNode.gain.setValueAtTime(0, this.audioCtx.currentTime);
+    
+    this.oscillator.connect(this.gainNode);
+    this.gainNode.connect(this.audioCtx.destination);
+    
+    this.oscillator.start();
+    this.audioStarted = false;
 
-    // MOVIMENTO & TURBO
-    this.velocity = new THREE.Vector3();
-    this.rotationSpeed = 3.8;
-    this.baseAcceleration = 45;
-    this.turboAcceleration = 120;
-    this.deceleration = 0.95;
-    this.isTurbo = false;
-    this.turboEnergy = 100;
-
-    this.keys = { forward: false, backward: false, left: false, right: false, boost: false };
-    window.addEventListener('keydown', (e) => this.onKeyDown(e));
-    window.addEventListener('keyup', (e) => this.onKeyUp(e));
-
-    // UI elements references
-    this.speedDisplay = document.getElementById('speed-display');
-    this.turboFill = document.getElementById('turbo-fill');
+    // Start audio on first key press (browser requirement)
+    window.addEventListener('keydown', () => {
+      if (!this.audioStarted) {
+        this.audioCtx.resume();
+        this.audioStarted = true;
+      }
+    }, { once: true });
   }
 
   onKeyDown(e) {
@@ -108,18 +140,15 @@ export class Player {
   }
 
   update(delta) {
-    // Turbo Logic
     this.isTurbo = this.keys.boost && this.turboEnergy > 0;
     if (this.isTurbo) {
-      this.turboEnergy -= 30 * delta;
+      this.turboEnergy -= 40 * delta;
     } else {
-      this.turboEnergy = Math.min(100, this.turboEnergy + 10 * delta);
+      this.turboEnergy = Math.min(100, this.turboEnergy + 15 * delta);
     }
 
-    // Update Turbo UI
     if (this.turboFill) this.turboFill.style.width = `${this.turboEnergy}%`;
 
-    // Movement
     if (this.keys.left) this.mesh.rotation.y += this.rotationSpeed * delta;
     if (this.keys.right) this.mesh.rotation.y -= this.rotationSpeed * delta;
 
@@ -130,20 +159,28 @@ export class Player {
     direction.applyQuaternion(this.mesh.quaternion);
 
     const currentAccel = this.isTurbo ? this.turboAcceleration : this.baseAcceleration;
-    
     if (this.keys.forward) this.velocity.addScaledVector(direction, currentAccel * delta);
     if (this.keys.backward) this.velocity.addScaledVector(direction, -currentAccel * delta);
 
     this.mesh.position.add(this.velocity.clone().multiplyScalar(delta));
     this.velocity.multiplyScalar(this.deceleration);
 
-    // Update Speed UI
     const speedKmh = Math.round(this.velocity.length() * 10);
     if (this.speedDisplay) this.speedDisplay.innerText = speedKmh.toString().padStart(3, '0');
 
-    // Visual Effects (Engine Pulse & Color Change)
+    // SCIE (Trails)
+    this.updateTrails(delta);
+
+    // AUDIO UPDATE
+    if (this.audioStarted) {
+      const speedFactor = this.velocity.length() / 20;
+      this.oscillator.frequency.setTargetAtTime(40 + speedFactor * 100 + (this.isTurbo ? 50 : 0), this.audioCtx.currentTime, 0.1);
+      this.gainNode.gain.setTargetAtTime(0.05 + speedFactor * 0.1, this.audioCtx.currentTime, 0.1);
+    }
+
+    // Visuals
     const time = Date.now() * 0.002;
-    const turboScale = this.isTurbo ? 2 : 1;
+    const turboScale = this.isTurbo ? 2.5 : 1;
     const turboColor = this.isTurbo ? 0xffffff : 0x00ffff;
 
     this.engines.forEach(engine => {
@@ -154,5 +191,41 @@ export class Player {
 
     this.cockpit.material.emissiveIntensity = 0.5 + Math.sin(time) * 0.3;
     this.mesh.position.y = 1.2 + Math.sin(Date.now() * 0.005) * 0.1;
+  }
+
+  updateTrails(delta) {
+    this.trailTimer += delta;
+    if (this.trailTimer > 0.05 && this.velocity.length() > 5) {
+      this.enginePositions.forEach(pos => {
+        const trailGeo = new THREE.SphereGeometry(0.1, 8, 8);
+        const trailMat = new THREE.MeshBasicMaterial({ 
+          color: this.isTurbo ? 0xffffff : 0x00ffff, 
+          transparent: true, 
+          opacity: 0.5 
+        });
+        const trail = new THREE.Mesh(trailGeo, trailMat);
+        
+        // Posizione scia basata sulla posizione attuale dei motori
+        const worldPos = new THREE.Vector3(pos.x, pos.y, pos.z - 0.5);
+        worldPos.applyMatrix4(this.mesh.matrixWorld);
+        trail.position.copy(worldPos);
+        
+        this.scene.add(trail);
+        this.trails.push({ mesh: trail, life: 1.0 });
+      });
+      this.trailTimer = 0;
+    }
+
+    for (let i = this.trails.length - 1; i >= 0; i--) {
+      const t = this.trails[i];
+      t.life -= delta * 2;
+      t.mesh.scale.set(t.life, t.life, t.life);
+      t.mesh.material.opacity = t.life * 0.5;
+      
+      if (t.life <= 0) {
+        this.scene.remove(t.mesh);
+        this.trails.splice(i, 1);
+      }
+    }
   }
 }
