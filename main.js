@@ -25,10 +25,11 @@ composer.addPass(renderScene);
 composer.addPass(bloomPass);
 
 // Environment
-const { planets } = setupEnvironment(scene);
+const environment = setupEnvironment(scene);
+const { planets } = environment;
 
-// Player (Ora passiamo i pianeti al costruttore)
-const player = new Player(scene, planets);
+// Player (Passiamo l'intero environment per le collisioni)
+const player = new Player(scene, planets, environment);
 
 // LIGHTING
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); 
@@ -62,9 +63,7 @@ function animate() {
   player.update(delta);
   
   // Rotazione dei Pianeti
-  planets.forEach(p => {
-    p.mesh.rotation.y += p.rotationSpeed;
-  });
+  planets.forEach(p => { p.mesh.rotation.y += p.rotationSpeed; });
 
   // Camera Effects
   const targetFOV = player.isTurbo ? 95 : (player.isWarping ? 120 : 75);
@@ -83,10 +82,7 @@ function animate() {
 
   planets.forEach(p => {
     const d = player.mesh.position.distanceTo(p.mesh.position);
-    if (d < minDistance) {
-      minDistance = d;
-      closestPlanet = p;
-    }
+    if (d < minDistance) { minDistance = d; closestPlanet = p; }
   });
 
   if (closestPlanet && planetDisplay && distanceDisplay) {
