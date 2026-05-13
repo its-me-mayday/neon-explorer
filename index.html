@@ -66,7 +66,6 @@
         transition: width 0.1s ease;
       }
 
-      /* RADAR */
       #radar {
         position: absolute;
         bottom: 40px; left: 50%;
@@ -77,20 +76,8 @@
         transform: translateX(-50%);
         overflow: hidden;
       }
-      #radar-center {
-        position: absolute;
-        top: 50%; left: 50%;
-        width: 4px; height: 4px;
-        background: #fff;
-        border-radius: 50%;
-        transform: translate(-50%, -50%);
-      }
-      .radar-sweep {
-        position: absolute;
-        top: 0; left: 0; width: 100%; height: 100%;
-        background: conic-gradient(from 0deg, transparent, rgba(0, 255, 255, 0.2));
-        animation: rotate 3s linear infinite;
-      }
+      #radar-center { position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: #fff; border-radius: 50%; transform: translate(-50%, -50%); }
+      .radar-sweep { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: conic-gradient(from 0deg, transparent, rgba(0, 255, 255, 0.2)); animation: rotate 3s linear infinite; }
       @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
       .top-info {
@@ -103,7 +90,6 @@
       .glitch-text { animation: blink 2s infinite; color: #ffaa00; }
       @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
       
-      /* WARNING OVERLAY */
       #warning {
         position: absolute;
         top: 50%; left: 50%;
@@ -116,6 +102,29 @@
         text-shadow: 0 0 20px #ff0000;
         z-index: 100;
       }
+
+      /* LEGENDA */
+      #controls-legend {
+        position: absolute;
+        top: 50%; right: 40px;
+        transform: translateY(-50%);
+        background: rgba(0, 20, 20, 0.85);
+        border: 1px solid #00ffff;
+        padding: 20px;
+        width: 250px;
+        display: block; /* Visibile all'inizio */
+        transition: opacity 0.3s ease;
+        box-shadow: 0 0 30px rgba(0, 255, 255, 0.1);
+      }
+      .legend-title { font-family: 'Orbitron', sans-serif; font-size: 1rem; border-bottom: 1px solid #00ffff; margin-bottom: 15px; padding-bottom: 5px; color: #fff; }
+      .control-item { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.85rem; }
+      .key { color: #ffffff; font-weight: 700; background: rgba(0, 255, 255, 0.2); padding: 2px 6px; border-radius: 3px; }
+      
+      #info-hint {
+        position: absolute;
+        top: 100px; right: 40px;
+        font-size: 0.7rem; opacity: 0.6;
+      }
     </style>
   </head>
   <body>
@@ -123,13 +132,21 @@
     <div id="warning">COLLISION WARNING</div>
     
     <div id="hud">
-      <div class="crosshair"></div>
-      
-      <div id="radar">
-        <div class="radar-sweep"></div>
-        <div id="radar-center"></div>
-        <!-- I puntini dei pianeti verranno aggiunti via JS -->
+      <div id="info-hint">PRESS [ I ] TO TOGGLE CONTROLS</div>
+
+      <div id="controls-legend">
+        <div class="legend-title">FLIGHT MANUAL</div>
+        <div class="control-item"><span>THRUST (Fwd/Bwd)</span> <span class="key">W / S</span></div>
+        <div class="control-item"><span>YAW (Turn L/R)</span> <span class="key">A / D</span></div>
+        <div class="control-item"><span>PITCH (Up/Down)</span> <span class="key">↑ / ↓</span></div>
+        <div class="control-item"><span>QUATUM BOOST</span> <span class="key">SHIFT</span></div>
+        <div class="control-item"><span>WARP JUMP</span> <span class="key">SPACE</span></div>
+        <div class="control-item"><span>CRUISE CONTROL</span> <span class="key">C</span></div>
+        <div class="control-item"><span>TOGGLE INFO</span> <span class="key">I</span></div>
       </div>
+
+      <div class="crosshair"></div>
+      <div id="radar"><div class="radar-sweep"></div><div id="radar-center"></div></div>
 
       <div class="top-info">
         <div class="system-status">
@@ -149,9 +166,7 @@
 
       <div class="turbo-container">
         <div class="turbo-label">Quantum Boost</div>
-        <div class="turbo-bar-bg">
-          <div id="turbo-fill"></div>
-        </div>
+        <div class="turbo-bar-bg"><div id="turbo-fill"></div></div>
       </div>
     </div>
 

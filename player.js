@@ -29,6 +29,7 @@ export class Player {
     this.isCruise = false;
     this.turboEnergy = 100;
     this.isWarping = false;
+    this.legendVisible = true;
 
     // SCIE
     this.trailPoints = [[], [], [], []];
@@ -40,12 +41,13 @@ export class Player {
     window.addEventListener('keydown', (e) => this.handleKeyDown(e));
     window.addEventListener('keyup', (e) => this.handleKeyUp(e));
 
-    // UI
+    // UI ELEMENTS
     this.speedDisplay = document.getElementById('speed-display');
     this.turboFill = document.getElementById('turbo-fill');
     this.warningHUD = document.getElementById('warning');
     this.statusText = document.getElementById('status-text');
     this.radar = document.getElementById('radar');
+    this.legend = document.getElementById('controls-legend');
 
     this.setupAudio();
   }
@@ -61,12 +63,10 @@ export class Player {
   }
 
   buildShip() {
-    // Il naso della nave che diventerà incandescente
     const noseGeo = new THREE.ConeGeometry(0.3, 1.5, 4);
     this.nose = new THREE.Mesh(noseGeo, this.hullMat.clone());
     this.nose.rotation.x = Math.PI / 2; this.nose.position.z = 1.2;
     this.mesh.add(this.nose);
-
     const bodyGeo = new THREE.BoxGeometry(0.6, 0.4, 1.5);
     const body = new THREE.Mesh(bodyGeo, this.hullMat);
     this.mesh.add(body);
@@ -118,16 +118,17 @@ export class Player {
     this.noiseSource.connect(this.engineFilter); this.engineFilter.connect(this.gainNode); this.gainNode.connect(this.audioCtx.destination);
     this.noiseSource.start();
     this.audioStarted = false;
+    window.addEventListener('keydown', () => { if (!this.audioStarted) { this.audioCtx.resume(); this.audioStarted = true; } }, { once: true });
   }
 
   handleKeyDown(e) {
-    if (!this.audioStarted) { this.audioCtx.resume(); this.audioStarted = true; }
     switch (e.code) {
       case 'KeyW': this.keys.forward = true; this.isCruise = false; break;
       case 'KeyS': this.keys.backward = true; this.isCruise = false; break;
       case 'KeyA': this.keys.left = true; break;
       case 'KeyD': this.keys.right = true; break;
-      case 'KeyC': this.isCruise = !this.isCruise; break; // Toggle Cruise Control
+      case 'KeyC': this.isCruise = !this.isCruise; break;
+      case 'KeyI': this.toggleLegend(); break; // Toggle Legend
       case 'ArrowUp': this.keys.up = true; break;
       case 'ArrowDown': this.keys.down = true; break;
       case 'ShiftLeft': case 'ShiftRight': this.keys.boost = true; break;
@@ -147,6 +148,13 @@ export class Player {
     }
   }
 
+  toggleLegend() {
+    this.legendVisible = !this.legendVisible;
+    if (this.legend) {
+      this.legend.style.display = this.legendVisible ? 'block' : 'none';
+    }
+  }
+
   startWarp() {
     if (this.isWarping || !this.planets) return;
     let nextPlanet = null; let minDiff = Infinity; const currentPos = this.mesh.position;
@@ -154,22 +162,8 @@ export class Player {
     if (nextPlanet) {
       this.isWarping = true;
       this.warpTarget = nextPlanet.mesh.position.clone().add(new THREE.Vector3(0, 100, -400));
-      
-      // Fix Audio Warp
-      if (this.audioStarted) {
-        this.engineFilter.frequency.setTargetAtTime(8000, this.audioCtx.currentTime, 0.1);
-        this.gainNode.gain.setTargetAtTime(0.8, this.audioCtx.currentTime, 0.1);
-      }
-
-      setTimeout(() => {
-        this.mesh.position.copy(this.warpTarget);
-        this.velocity.set(0, 0, 50);
-        this.isWarping = false;
-        if (this.audioStarted) {
-          this.engineFilter.frequency.setTargetAtTime(200, this.audioCtx.currentTime, 0.5);
-          this.gainNode.gain.setTargetAtTime(0.2, this.audioCtx.currentTime, 0.5);
-        }
-      }, 1000);
+      if (this.audioStarted) { this.engineFilter.frequency.setTargetAtTime(8000, this.audioCtx.currentTime, 0.1); this.gainNode.gain.setTargetAtTime(0.8, this.audioCtx.currentTime, 0.1); }
+      setTimeout(() => { this.mesh.position.copy(this.warpTarget); this.velocity.set(0, 0, 50); this.isWarping = false; if (this.audioStarted) { this.engineFilter.frequency.setTargetAtTime(200, this.audioCtx.currentTime, 0.5); this.gainNode.gain.setTargetAtTime(0.2, this.audioCtx.currentTime, 0.5); } }, 1000);
     }
   }
 
@@ -180,12 +174,10 @@ export class Player {
     this.checkCollisions();
     this.updateAtmosphereEffect();
 
-    // TURBO
     this.isTurbo = this.keys.boost && this.turboEnergy > 0;
     if (this.isTurbo) { this.turboEnergy -= 35 * delta; } else { this.turboEnergy = Math.min(100, this.turboEnergy + 25 * delta); }
     if (this.turboFill) this.turboFill.style.width = `${this.turboEnergy}%`;
 
-    // 3D ROTATION
     if (this.keys.up) this.mesh.rotateX(this.turnSpeed * delta);
     if (this.keys.down) this.mesh.rotateX(-this.turnSpeed * delta);
     if (this.keys.left) this.mesh.rotateY(this.turnSpeed * delta);
@@ -196,7 +188,6 @@ export class Player {
     currentEuler.z = THREE.MathUtils.lerp(currentEuler.z, targetRoll, 0.1);
     this.mesh.quaternion.setFromEuler(currentEuler);
 
-    // THRUST & CRUISE
     const direction = new THREE.Vector3(0, 0, 1);
     direction.applyQuaternion(this.mesh.quaternion);
 
@@ -204,31 +195,18 @@ export class Player {
     if (this.keys.forward) this.velocity.addScaledVector(direction, currentAccel * delta);
     if (this.keys.backward) this.velocity.addScaledVector(direction, -currentAccel * delta);
 
-    // CRUISE CONTROL LOGIC
-    if (this.isCruise && this.velocity.length() < 30) {
-       this.velocity.addScaledVector(direction, this.baseAcceleration * 0.5 * delta);
-    }
-
+    if (this.isCruise && this.velocity.length() < 30) { this.velocity.addScaledVector(direction, this.baseAcceleration * 0.5 * delta); }
     this.mesh.position.add(this.velocity.clone().multiplyScalar(delta));
-    
-    // Se cruise è attivo, rallenta meno
     const currentDecel = this.isCruise ? 0.998 : this.deceleration;
     this.velocity.multiplyScalar(currentDecel);
 
     this.updateRibbonTrails();
     this.updateRadar();
 
-    // UI
     const speedKmh = Math.round(this.velocity.length() * 10);
-    if (this.speedDisplay) {
-      this.speedDisplay.innerText = speedKmh.toString().padStart(3, '0');
-      this.speedDisplay.style.color = this.isCruise ? '#ffaa00' : '#00ffff';
-    }
-    if (this.statusText) {
-      this.statusText.innerText = this.isCruise ? 'SYSTEM STATUS: CRUISE ACTIVE' : 'SYSTEM STATUS: OPTIMAL';
-    }
+    if (this.speedDisplay) { this.speedDisplay.innerText = speedKmh.toString().padStart(3, '0'); this.speedDisplay.style.color = this.isCruise ? '#ffaa00' : '#00ffff'; }
+    if (this.statusText) { this.statusText.innerText = this.isCruise ? 'SYSTEM STATUS: CRUISE ACTIVE' : 'SYSTEM STATUS: OPTIMAL'; }
 
-    // Audio
     if (this.audioStarted && !this.isWarping) {
       const speedFactor = Math.min(1, this.velocity.length() / 150);
       this.engineFilter.frequency.setTargetAtTime(100 + speedFactor * 500 + (this.isTurbo ? 800 : 0), this.audioCtx.currentTime, 0.2);
@@ -237,21 +215,11 @@ export class Player {
   }
 
   updateAtmosphereEffect() {
-    // Cerca la Terra
     const earth = this.planets.find(p => p.name === 'Terra');
     if (earth) {
       const dist = this.mesh.position.distanceTo(earth.mesh.position);
-      const intensity = Math.max(0, 1 - (dist - 150) / 200); // Inizia a scaldarsi a 350 unità
-      
-      if (intensity > 0) {
-        this.nose.material.emissive.setHex(0xff3300);
-        this.nose.material.emissiveIntensity = intensity * 5;
-        this.nose.material.color.setRGB(1, 1 - intensity, 1 - intensity);
-      } else {
-        this.nose.material.emissive.setHex(0x00ffff);
-        this.nose.material.emissiveIntensity = 0.05;
-        this.nose.material.color.setRGB(1, 1, 1);
-      }
+      const intensity = Math.max(0, 1 - (dist - 150) / 200);
+      if (intensity > 0) { this.nose.material.emissive.setHex(0xff3300); this.nose.material.emissiveIntensity = intensity * 5; this.nose.material.color.setRGB(1, 1 - intensity, 1 - intensity); } else { this.nose.material.emissive.setHex(0x00ffff); this.nose.material.emissiveIntensity = 0.05; this.nose.material.color.setRGB(1, 1, 1); }
     }
   }
 
@@ -260,54 +228,28 @@ export class Player {
     for (let asteroid of this.asteroids) {
       const dist = shipPos.distanceTo(asteroid.position);
       const minCollideDist = 15 + asteroid.scale.x * 0.5;
-      if (dist < minCollideDist) {
-        const bounceDir = shipPos.clone().sub(asteroid.position).normalize();
-        this.velocity.copy(bounceDir.multiplyScalar(40));
-        this.showWarning();
-        return;
-      }
+      if (dist < minCollideDist) { const bounceDir = shipPos.clone().sub(asteroid.position).normalize(); this.velocity.copy(bounceDir.multiplyScalar(40)); this.showWarning(); return; }
     }
   }
 
   showWarning() {
-    if (this.warningHUD) {
-      this.warningHUD.style.display = 'block';
-      setTimeout(() => { this.warningHUD.style.display = 'none'; }, 1000);
-    }
+    if (this.warningHUD) { this.warningHUD.style.display = 'block'; setTimeout(() => { this.warningHUD.style.display = 'none'; }, 1000); }
   }
 
   updateRibbonTrails() {
     this.enginePositions.forEach((pos, i) => {
-      const worldPos = new THREE.Vector3(pos.x, pos.y, pos.z - 0.5);
-      worldPos.applyMatrix4(this.mesh.matrixWorld);
-      const pts = this.trailPoints[i];
-      pts.unshift(worldPos.clone());
-      if (pts.length > 15) pts.pop();
-      if (pts.length > 1) {
-        const mesh = this.trailMeshes[i];
-        mesh.position.copy(pts[0]);
-        mesh.lookAt(pts[pts.length-1]);
-        mesh.scale.z = pts[0].distanceTo(pts[pts.length-1]) || 0.1;
-        mesh.material.opacity = this.isTurbo ? 0.8 : 0.4;
-      }
+      const worldPos = new THREE.Vector3(pos.x, pos.y, pos.z - 0.5); worldPos.applyMatrix4(this.mesh.matrixWorld);
+      const pts = this.trailPoints[i]; pts.unshift(worldPos.clone()); if (pts.length > 15) pts.pop();
+      if (pts.length > 1) { const mesh = this.trailMeshes[i]; mesh.position.copy(pts[0]); mesh.lookAt(pts[pts.length-1]); mesh.scale.z = pts[0].distanceTo(pts[pts.length-1]) || 0.1; mesh.material.opacity = this.isTurbo ? 0.8 : 0.4; }
     });
   }
 
   updateRadar() {
     if (!this.radar) return;
-    const dots = this.radar.querySelectorAll('.radar-dot');
-    dots.forEach(d => d.remove());
+    const dots = this.radar.querySelectorAll('.radar-dot'); dots.forEach(d => d.remove());
     this.planets.forEach(p => {
-      const relPos = p.mesh.position.clone().sub(this.mesh.position);
-      const dist = relPos.length();
-      if (dist < 40000) {
-        const x = (relPos.x / 40000) * 75 + 75;
-        const y = (relPos.z / 40000) * 75 + 75;
-        const dot = document.createElement('div');
-        dot.className = 'radar-dot';
-        dot.style.cssText = `position:absolute;left:${x}px;top:${y}px;width:5px;height:5px;background:#00ffff;border-radius:50%;box-shadow:0 0 8px #00ffff;`;
-        this.radar.appendChild(dot);
-      }
+      const relPos = p.mesh.position.clone().sub(this.mesh.position); const dist = relPos.length();
+      if (dist < 40000) { const x = (relPos.x / 40000) * 75 + 75; const y = (relPos.z / 40000) * 75 + 75; const dot = document.createElement('div'); dot.className = 'radar-dot'; dot.style.cssText = `position:absolute;left:${x}px;top:${y}px;width:5px;height:5px;background:#00ffff;border-radius:50%;box-shadow:0 0 8px #00ffff;`; this.radar.appendChild(dot); }
     });
   }
 }
