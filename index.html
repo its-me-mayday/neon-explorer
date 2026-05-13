@@ -20,6 +20,26 @@
         letter-spacing: 1px;
       }
 
+      /* COCKPIT OVERLAY (Visible only in 1st person) */
+      #cockpit-view {
+        position: absolute;
+        top: 0; left: 0; width: 100%; height: 100%;
+        border: 40px solid transparent;
+        border-image: linear-gradient(to bottom, rgba(0,255,255,0.1), transparent) 1;
+        display: none;
+        box-shadow: inset 0 0 100px rgba(0,255,255,0.1);
+        z-index: 5;
+      }
+      .cockpit-frame {
+        position: absolute;
+        bottom: 0; width: 100%; height: 20%;
+        background: linear-gradient(to top, rgba(0,20,20,0.9), transparent);
+        border-top: 1px solid rgba(0,255,255,0.3);
+        display: flex; justify-content: space-around; align-items: center;
+        padding: 0 100px; box-sizing: border-box;
+      }
+      .cockpit-data { font-family: 'Orbitron', sans-serif; font-size: 0.7rem; color: #00ffff; opacity: 0.8; }
+
       .crosshair {
         position: absolute;
         top: 50%; left: 50%;
@@ -28,43 +48,17 @@
         transform: translate(-50%, -50%) rotate(45deg);
       }
       .crosshair::before {
-        content: '';
-        position: absolute;
-        top: 50%; left: 50%;
-        width: 4px; height: 4px;
-        background: #00ffff;
-        transform: translate(-50%, -50%);
-        border-radius: 50%;
-        box-shadow: 0 0 10px #00ffff;
+        content: ''; position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: #00ffff; transform: translate(-50%, -50%); border-radius: 50%; box-shadow: 0 0 10px #00ffff;
       }
 
-      .stats-left {
-        position: absolute;
-        bottom: 40px; left: 40px;
-        border-left: 4px solid #00ffff;
-        padding-left: 15px;
-      }
+      .stats-left { position: absolute; bottom: 40px; left: 40px; border-left: 4px solid #00ffff; padding-left: 15px; z-index: 10; }
       .speed-label { font-size: 0.8rem; opacity: 0.7; }
       .speed-value { font-family: 'Orbitron', sans-serif; font-size: 2.5rem; font-weight: 700; }
 
-      .turbo-container {
-        position: absolute;
-        bottom: 40px; right: 40px;
-        text-align: right;
-      }
+      .turbo-container { position: absolute; bottom: 40px; right: 40px; text-align: right; z-index: 10; }
       .turbo-label { font-size: 0.8rem; margin-bottom: 5px; opacity: 0.7; }
-      .turbo-bar-bg {
-        width: 200px; height: 10px;
-        background: rgba(0, 255, 255, 0.1);
-        border: 1px solid rgba(0, 255, 255, 0.3);
-        overflow: hidden;
-      }
-      #turbo-fill {
-        width: 100%; height: 100%;
-        background: #00ffff;
-        box-shadow: 0 0 15px #00ffff;
-        transition: width 0.1s ease;
-      }
+      .turbo-bar-bg { width: 200px; height: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid rgba(0, 255, 255, 0.3); overflow: hidden; }
+      #turbo-fill { width: 100%; height: 100%; background: #00ffff; box-shadow: 0 0 15px #00ffff; transition: width 0.1s ease; }
 
       #radar {
         position: absolute;
@@ -75,56 +69,24 @@
         border-radius: 50%;
         transform: translateX(-50%);
         overflow: hidden;
+        z-index: 10;
       }
       #radar-center { position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: #fff; border-radius: 50%; transform: translate(-50%, -50%); }
       .radar-sweep { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: conic-gradient(from 0deg, transparent, rgba(0, 255, 255, 0.2)); animation: rotate 3s linear infinite; }
       @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-      .top-info {
-        position: absolute;
-        top: 30px; width: 100%;
-        display: flex; justify-content: space-between;
-        padding: 0 40px; box-sizing: border-box;
-      }
-      .system-status { font-size: 0.9rem; }
+      .top-info { position: absolute; top: 30px; width: 100%; display: flex; justify-content: space-between; padding: 0 40px; box-sizing: border-box; z-index: 10; }
       .glitch-text { animation: blink 2s infinite; color: #ffaa00; }
       @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
       
       #warning {
-        position: absolute;
-        top: 50%; left: 50%;
-        transform: translate(-50%, -50%);
-        color: #ff0000;
-        font-family: 'Orbitron', sans-serif;
-        font-size: 3rem;
-        font-weight: 700;
-        display: none;
-        text-shadow: 0 0 20px #ff0000;
-        z-index: 100;
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #ff0000; font-family: 'Orbitron', sans-serif; font-size: 3rem; font-weight: 700; display: none; text-shadow: 0 0 20px #ff0000; z-index: 100;
       }
 
-      /* LEGENDA */
-      #controls-legend {
-        position: absolute;
-        top: 50%; right: 40px;
-        transform: translateY(-50%);
-        background: rgba(0, 20, 20, 0.85);
-        border: 1px solid #00ffff;
-        padding: 20px;
-        width: 250px;
-        display: block; /* Visibile all'inizio */
-        transition: opacity 0.3s ease;
-        box-shadow: 0 0 30px rgba(0, 255, 255, 0.1);
-      }
+      #controls-legend { position: absolute; top: 50%; right: 40px; transform: translateY(-50%); background: rgba(0, 20, 20, 0.85); border: 1px solid #00ffff; padding: 20px; width: 250px; display: block; transition: opacity 0.3s ease; box-shadow: 0 0 30px rgba(0, 255, 255, 0.1); z-index: 20; }
       .legend-title { font-family: 'Orbitron', sans-serif; font-size: 1rem; border-bottom: 1px solid #00ffff; margin-bottom: 15px; padding-bottom: 5px; color: #fff; }
       .control-item { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.85rem; }
       .key { color: #ffffff; font-weight: 700; background: rgba(0, 255, 255, 0.2); padding: 2px 6px; border-radius: 3px; }
-      
-      #info-hint {
-        position: absolute;
-        top: 100px; right: 40px;
-        font-size: 0.7rem; opacity: 0.6;
-      }
     </style>
   </head>
   <body>
@@ -132,7 +94,15 @@
     <div id="warning">COLLISION WARNING</div>
     
     <div id="hud">
-      <div id="info-hint">PRESS [ I ] TO TOGGLE CONTROLS</div>
+      <!-- COCKPIT OVERLAY -->
+      <div id="cockpit-view">
+        <div class="cockpit-frame">
+          <div class="cockpit-data">STRUC_INTEGRITY: 100%</div>
+          <div class="cockpit-data">CPU_LOAD: 12%</div>
+          <div class="cockpit-data">ATM_DENSITY: 0.00</div>
+          <div class="cockpit-data">PWR_CORE: STABLE</div>
+        </div>
+      </div>
 
       <div id="controls-legend">
         <div class="legend-title">FLIGHT MANUAL</div>
