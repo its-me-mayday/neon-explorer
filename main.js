@@ -7,9 +7,10 @@ import { Player } from './player.js';
 
 // Scene Setup
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000000); // Nero Assoluto
+scene.background = new THREE.Color(0x000000); 
+scene.fog = new THREE.FogExp2(0x000000, 0.001);
 
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 3000);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 5000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
@@ -21,31 +22,31 @@ document.getElementById('app').appendChild(renderer.domElement);
 const renderScene = new RenderPass(scene, camera);
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
-  0.4, // Bloom leggero per le luci della nave
-  0.2, 
-  0.9 
+  0.8, 
+  0.4, 
+  0.85 
 );
 
 const composer = new EffectComposer(renderer);
 composer.addPass(renderScene);
 composer.addPass(bloomPass);
 
-// Environment (Solo Stelle)
+// Environment
 setupEnvironment(scene);
 
 // Player
 const player = new Player(scene);
 
-// --- LIGHTING ---
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); 
+// LIGHTING
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
 scene.add(ambientLight);
 
 const starLight = new THREE.DirectionalLight(0xffffff, 1.2);
 starLight.position.set(50, 100, 50);
 scene.add(starLight);
 
-// Faro anteriore
-const headLight = new THREE.SpotLight(0xffffff, 15, 60, Math.PI / 6, 0.5);
+// Headlight
+const headLight = new THREE.SpotLight(0xffffff, 15, 80, Math.PI / 6, 0.5);
 scene.add(headLight);
 scene.add(headLight.target);
 
@@ -63,8 +64,14 @@ function animate() {
   const delta = 0.016; 
   player.update(delta);
   
+  // Turbo Camera Effect (FOV Stretch)
+  const targetFOV = player.isTurbo ? 95 : 75;
+  camera.fov = THREE.MathUtils.lerp(camera.fov, targetFOV, 0.1);
+  camera.updateProjectionMatrix();
+
   // Camera Follow
-  const relativeCameraOffset = new THREE.Vector3(0, 5, -12);
+  const targetDist = player.isTurbo ? -15 : -12;
+  const relativeCameraOffset = new THREE.Vector3(0, 5, targetDist);
   const cameraOffset = relativeCameraOffset.applyMatrix4(player.mesh.matrixWorld);
   camera.position.lerp(cameraOffset, 0.08);
   camera.lookAt(player.mesh.position);
@@ -73,6 +80,7 @@ function animate() {
   headLight.position.copy(player.mesh.position);
   const forward = new THREE.Vector3(0, 0, 5).applyQuaternion(player.mesh.quaternion);
   headLight.target.position.copy(player.mesh.position).add(forward);
+  headLight.intensity = player.isTurbo ? 30 : 15;
 
   composer.render();
 }
