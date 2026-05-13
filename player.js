@@ -19,6 +19,9 @@ export class Player {
     this.shipParts = new THREE.Group();
     this.mesh.add(this.shipParts);
 
+    // Coordinate motori salvate per le scie
+    this.enginePositions = [{x:-0.6,y:-0.15,z:-1},{x:0.6,y:-0.15,z:-1},{x:-1.4,y:-0.1,z:-0.3},{x:1.4,y:-0.1,z:-0.3}];
+
     this.buildShip();
     this.buildShield();
     
@@ -33,7 +36,7 @@ export class Player {
     // ARMI
     this.lasers = [];
     this.lastFireTime = 0;
-    this.fireRate = 200; // ms
+    this.fireRate = 200;
 
     // STATI
     this.isTurbo = false; this.isCruise = false; this.isWarping = false;
@@ -70,17 +73,19 @@ export class Player {
     this.nose = new THREE.Mesh(noseGeo, this.hullMat.clone());
     this.nose.rotation.x = Math.PI / 2; this.nose.position.z = 1.2;
     this.shipParts.add(this.nose);
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, 1.5), this.hullMat);
-    this.shipParts.add(body);
+    this.shipParts.add(new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, 1.5), this.hullMat));
     const back = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 1), this.hullMat);
     back.position.z = -0.8; this.shipParts.add(back);
     const cockpit = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x001111, emissive: 0x00ffff, emissiveIntensity: 0.5, transparent: true, opacity: 0.8 }));
     cockpit.position.set(0, 0.2, 0.4); cockpit.scale.set(1, 0.6, 1.5);
     this.shipParts.add(cockpit);
+    
     this.cameraAnchor = new THREE.Object3D();
-    this.cameraAnchor.position.set(0, 0.4, 1.0); // Spostata più avanti
+    this.cameraAnchor.position.set(0, 0.4, 1.5); // Spostata ancora più avanti per sicurezza
     this.mesh.add(this.cameraAnchor);
-    const wingGeo = new THREE.ExtrudeGeometry(this.createWingShape(), { depth: 0.1, bevelEnabled: true, bevelThickness: 0.05 });
+
+    const wingShape = new THREE.Shape(); wingShape.moveTo(0, 0); wingShape.lineTo(2.4, -1.4); wingShape.lineTo(2.4, 0.8); wingShape.lineTo(0, 1.4); wingShape.lineTo(0, 0);
+    const wingGeo = new THREE.ExtrudeGeometry(wingShape, { depth: 0.1, bevelEnabled: true, bevelThickness: 0.05 });
     const leftWing = new THREE.Mesh(wingGeo, this.hullMat); leftWing.rotation.x = Math.PI / 2; leftWing.position.set(-0.3, 0, 0.5);
     this.shipParts.add(leftWing);
     const rightWing = leftWing.clone(); rightWing.scale.x = -1; rightWing.position.x = 0.3;
@@ -89,17 +94,12 @@ export class Player {
     this.engineCores = [];
     this.enginesGroup = new THREE.Group();
     this.mesh.add(this.enginesGroup);
-    const enginePos = [{x:-0.6,y:-0.15,z:-1},{x:0.6,y:-0.15,z:-1},{x:-1.4,y:-0.1,z:-0.3},{x:1.4,y:-0.1,z:-0.3}];
-    enginePos.forEach(pos => {
+    this.enginePositions.forEach(pos => {
       const eGroup = new THREE.Group(); eGroup.position.set(pos.x, pos.y, pos.z); eGroup.rotation.x = Math.PI / 2;
       eGroup.add(new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.25, 0.8, 16, 1, true), this.darkMat));
       const core = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 12), this.glowMat.clone()); core.position.y = -0.3;
       eGroup.add(core); this.engineCores.push(core); this.enginesGroup.add(eGroup);
     });
-  }
-
-  createWingShape() {
-    const s = new THREE.Shape(); s.moveTo(0, 0); s.lineTo(2.4, -1.4); s.lineTo(2.4, 0.8); s.lineTo(0, 1.4); s.lineTo(0, 0); return s;
   }
 
   buildShield() {
@@ -172,7 +172,7 @@ export class Player {
     this.cameraMode = this.cameraMode === 'third' ? 'first' : 'third';
     const isFirst = this.cameraMode === 'first';
     this.shipParts.visible = !isFirst;
-    this.enginesGroup.visible = !isFirst; // Nascondi motori in 1st person
+    this.enginesGroup.visible = !isFirst; // Corretto: nascondi motori
     if (this.cockpitUI) this.cockpitUI.style.display = isFirst ? 'block' : 'none';
   }
 
@@ -185,29 +185,21 @@ export class Player {
     const now = Date.now();
     if (now - this.lastFireTime < this.fireRate) return;
     this.lastFireTime = now;
-
-    const laserGeo = new THREE.CylinderGeometry(0.05, 0.05, 10, 8);
+    const laserGeo = new THREE.CylinderGeometry(0.05, 0.05, 12, 8);
     const laserMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
     const laser = new THREE.Mesh(laserGeo, laserMat);
-    
     laser.position.copy(this.mesh.position);
     laser.quaternion.copy(this.mesh.quaternion);
-    laser.rotateX(Math.PI/2); // Allinea con avanti
-    
+    laser.rotateX(Math.PI/2);
     const direction = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
-    this.lasers.push({ mesh: laser, direction, life: 2.0 });
+    this.lasers.push({ mesh: laser, direction, life: 2.5 });
     this.scene.add(laser);
-
-    // Suono sparo
     if (this.audioStarted) {
-      const osc = this.audioCtx.createOscillator();
-      const g = this.audioCtx.createGain();
+      const osc = this.audioCtx.createOscillator(); const g = this.audioCtx.createGain();
       osc.type = 'sawtooth'; osc.frequency.setValueAtTime(880, this.audioCtx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(110, this.audioCtx.currentTime + 0.1);
-      g.gain.setValueAtTime(0.1, this.audioCtx.currentTime);
-      g.gain.linearRampToValueAtTime(0, this.audioCtx.currentTime + 0.1);
-      osc.connect(g); g.connect(this.audioCtx.destination);
-      osc.start(); osc.stop(this.audioCtx.currentTime + 0.1);
+      g.gain.setValueAtTime(0.1, this.audioCtx.currentTime); g.gain.linearRampToValueAtTime(0, this.audioCtx.currentTime + 0.1);
+      osc.connect(g); g.connect(this.audioCtx.destination); osc.start(); osc.stop(this.audioCtx.currentTime + 0.1);
     }
   }
 
@@ -232,7 +224,6 @@ export class Player {
 
     this.shieldMat.opacity = THREE.MathUtils.lerp(this.shieldMat.opacity, 0, 0.05);
 
-    // ROTAZIONE
     const pitch = (this.keys.up ? 1 : 0) - (this.keys.down ? 1 : 0);
     const yaw = (this.keys.left ? 1 : 0) - (this.keys.right ? 1 : 0);
     const roll = (this.keys.rollLeft ? 1 : 0) - (this.keys.rollRight ? 1 : 0);
@@ -242,7 +233,6 @@ export class Player {
 
     if (this.keys.level) { this.mesh.quaternion.slerp(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, this.mesh.rotation.y, 0)), 0.1); }
 
-    // FISICA
     this.isTurbo = this.keys.boost && this.turboEnergy > 0;
     if (this.isTurbo) { this.turboEnergy -= 35 * delta; } else { this.turboEnergy = Math.min(100, this.turboEnergy + 25 * delta); }
     if (this.turboFill) this.turboFill.style.width = `${this.turboEnergy}%`;
@@ -259,10 +249,8 @@ export class Player {
     this.updateRibbonTrails();
     this.updateRadar();
 
-    // UI
     if (this.speedDisplay) this.speedDisplay.innerText = Math.round(this.velocity.length() * 10).toString().padStart(3, '0');
 
-    // ANIMAZIONE MOTORI
     this.engineCores.forEach(core => {
       const s = (this.isTurbo ? 2.5 : 1) + Math.sin(Date.now()*0.005) * 0.1;
       core.scale.set(s, s, s); core.material.color.setHex(this.isTurbo ? 0xffffff : 0x00ffff);
@@ -274,15 +262,12 @@ export class Player {
       const l = this.lasers[i];
       l.mesh.position.addScaledVector(l.direction, 500 * delta);
       l.life -= delta;
-      
-      // Collisione con Alieni
       for (let alien of this.aliens) {
-        if (alien.mesh.visible && l.mesh.position.distanceTo(alien.mesh.position) < 20) {
-          alien.mesh.visible = false; // Distruggi alieno
+        if (alien.mesh.visible && l.mesh.position.distanceTo(alien.mesh.position) < 30) {
+          alien.mesh.visible = false;
           l.life = 0;
         }
       }
-
       if (l.life <= 0) { this.scene.remove(l.mesh); this.lasers.splice(i, 1); }
     }
   }
@@ -292,19 +277,20 @@ export class Player {
     if (earth) {
       const dist = this.mesh.position.distanceTo(earth.mesh.position);
       const intensity = Math.max(0, 1 - (dist - (earth.radius + 150)) / 200);
-      this.nose.material.emissiveIntensity = intensity * 5;
+      if (this.nose && this.nose.material) this.nose.material.emissiveIntensity = intensity * 5;
     }
   }
 
   checkCollisions() {
     const shipPos = this.mesh.position;
     for (let asteroid of this.asteroids) { if (shipPos.distanceTo(asteroid.position) < (15 + asteroid.scale.x * 0.5)) { this.handleCollision(asteroid.position); return; } }
-    for (let p of this.planets) { if (shipPos.distanceTo(p.mesh.position) < (p.radius + 10)) { this.handleCollision(p.mesh.position); return; } }
+    for (let p of this.planets) { if (shipPos.distanceTo(p.mesh.position) < (p.radius + 15)) { this.handleCollision(p.mesh.position); return; } }
   }
 
   handleCollision(objectPos) { this.velocity.copy(this.mesh.position.clone().sub(objectPos).normalize().multiplyScalar(50)); this.shieldMat.opacity = 0.8; if (this.warningHUD) { this.warningHUD.style.display = 'block'; setTimeout(() => { this.warningHUD.style.display = 'none'; }, 1000); } }
 
   updateRibbonTrails() {
+    // FIX: Usiamo this.enginePositions definito nel costruttore
     this.enginePositions.forEach((pos, i) => {
       const worldPos = new THREE.Vector3(pos.x, pos.y, pos.z - 0.5).applyMatrix4(this.mesh.matrixWorld);
       const pts = this.trailPoints[i]; pts.unshift(worldPos.clone()); if (pts.length > 15) pts.pop();
