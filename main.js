@@ -9,7 +9,7 @@ import { Player } from './player.js';
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000); 
 
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 100000); 
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 200000); 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
@@ -26,18 +26,14 @@ composer.addPass(bloomPass);
 
 // Environment
 const environment = setupEnvironment(scene);
-const { planets } = environment;
+const { planets, starField } = environment;
 
-// Player (Passiamo l'intero environment per le collisioni)
+// Player
 const player = new Player(scene, planets, environment);
 
 // LIGHTING
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); 
 scene.add(ambientLight);
-
-const starLight = new THREE.DirectionalLight(0xffffff, 1.2);
-starLight.position.set(50, 100, 50);
-scene.add(starLight);
 
 // Headlight
 const headLight = new THREE.SpotLight(0xffffff, 15, 80, Math.PI / 6, 0.5);
@@ -64,6 +60,12 @@ function animate() {
   
   // Rotazione dei Pianeti
   planets.forEach(p => { p.mesh.rotation.y += p.rotationSpeed; });
+
+  // INFINITE STARFIELD EFFECT
+  // Facciamo in modo che le stelle seguano la posizione del giocatore
+  if (starField) {
+    starField.position.copy(player.mesh.position);
+  }
 
   // Camera Effects
   const targetFOV = player.isTurbo ? 95 : (player.isWarping ? 120 : 75);

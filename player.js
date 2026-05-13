@@ -17,15 +17,16 @@ export class Player {
     this.mesh.position.set(0, 0, 0);
     this.scene.add(this.mesh);
 
-    // FISICA 3D
+    // FISICA
     this.velocity = new THREE.Vector3();
-    this.turnSpeed = 2.5; // Yaw/Pitch speed
-    this.rollSpeed = 1.5;
+    this.turnSpeed = 2.5;
     this.baseAcceleration = 70;
     this.turboAcceleration = 200;
     this.deceleration = 0.98;
     
+    // STATI
     this.isTurbo = false;
+    this.isCruise = false;
     this.turboEnergy = 100;
     this.isWarping = false;
 
@@ -34,17 +35,12 @@ export class Player {
     this.trailMeshes = [];
     this.setupTrails();
 
-    // INPUT (Aggiunti tasti per Pitch)
-    this.keys = { 
-      forward: false, backward: false, 
-      left: false, right: false, 
-      up: false, down: false,
-      boost: false 
-    };
-    
+    // INPUT
+    this.keys = { forward: false, backward: false, left: false, right: false, up: false, down: false, boost: false };
     window.addEventListener('keydown', (e) => this.handleKeyDown(e));
     window.addEventListener('keyup', (e) => this.handleKeyUp(e));
 
+    // UI
     this.speedDisplay = document.getElementById('speed-display');
     this.turboFill = document.getElementById('turbo-fill');
     this.warningHUD = document.getElementById('warning');
@@ -65,10 +61,12 @@ export class Player {
   }
 
   buildShip() {
+    // Il naso della nave che diventerà incandescente
     const noseGeo = new THREE.ConeGeometry(0.3, 1.5, 4);
-    const nose = new THREE.Mesh(noseGeo, this.hullMat);
-    nose.rotation.x = Math.PI / 2; nose.position.z = 1.2;
-    this.mesh.add(nose);
+    this.nose = new THREE.Mesh(noseGeo, this.hullMat.clone());
+    this.nose.rotation.x = Math.PI / 2; this.nose.position.z = 1.2;
+    this.mesh.add(this.nose);
+
     const bodyGeo = new THREE.BoxGeometry(0.6, 0.4, 1.5);
     const body = new THREE.Mesh(bodyGeo, this.hullMat);
     this.mesh.add(body);
@@ -77,8 +75,8 @@ export class Player {
     back.position.z = -0.8;
     this.mesh.add(back);
     const cockpitGeo = new THREE.SphereGeometry(0.35, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2);
-    const cockpitMat = new THREE.MeshStandardMaterial({ color: 0x001111, emissive: 0x00ffff, emissiveIntensity: 0.5, transparent: true, opacity: 0.8 });
-    const cockpit = new THREE.Mesh(cockpitGeo, cockpitMat);
+    this.cockpitMat = new THREE.MeshStandardMaterial({ color: 0x001111, emissive: 0x00ffff, emissiveIntensity: 0.5, transparent: true, opacity: 0.8 });
+    const cockpit = new THREE.Mesh(cockpitGeo, this.cockpitMat);
     cockpit.position.set(0, 0.2, 0.4); cockpit.scale.set(1, 0.6, 1.5);
     this.mesh.add(cockpit);
     const wingShape = new THREE.Shape();
@@ -102,9 +100,7 @@ export class Player {
     for (let i = 0; i < 4; i++) {
       const geo = new THREE.PlaneGeometry(0.4, 1, 1, 10);
       const mesh = new THREE.Mesh(geo, trailMat.clone());
-      mesh.frustumCulled = false;
-      this.scene.add(mesh);
-      this.trailMeshes.push(mesh);
+      mesh.frustumCulled = false; this.scene.add(mesh); this.trailMeshes.push(mesh);
     }
   }
 
@@ -127,10 +123,11 @@ export class Player {
   handleKeyDown(e) {
     if (!this.audioStarted) { this.audioCtx.resume(); this.audioStarted = true; }
     switch (e.code) {
-      case 'KeyW': this.keys.forward = true; break;
-      case 'KeyS': this.keys.backward = true; break;
+      case 'KeyW': this.keys.forward = true; this.isCruise = false; break;
+      case 'KeyS': this.keys.backward = true; this.isCruise = false; break;
       case 'KeyA': this.keys.left = true; break;
       case 'KeyD': this.keys.right = true; break;
+      case 'KeyC': this.isCruise = !this.isCruise; break; // Toggle Cruise Control
       case 'ArrowUp': this.keys.up = true; break;
       case 'ArrowDown': this.keys.down = true; break;
       case 'ShiftLeft': case 'ShiftRight': this.keys.boost = true; break;
@@ -157,7 +154,22 @@ export class Player {
     if (nextPlanet) {
       this.isWarping = true;
       this.warpTarget = nextPlanet.mesh.position.clone().add(new THREE.Vector3(0, 100, -400));
-      setTimeout(() => { this.mesh.position.copy(this.warpTarget); this.velocity.set(0, 0, 50); this.isWarping = false; }, 1000);
+      
+      // Fix Audio Warp
+      if (this.audioStarted) {
+        this.engineFilter.frequency.setTargetAtTime(8000, this.audioCtx.currentTime, 0.1);
+        this.gainNode.gain.setTargetAtTime(0.8, this.audioCtx.currentTime, 0.1);
+      }
+
+      setTimeout(() => {
+        this.mesh.position.copy(this.warpTarget);
+        this.velocity.set(0, 0, 50);
+        this.isWarping = false;
+        if (this.audioStarted) {
+          this.engineFilter.frequency.setTargetAtTime(200, this.audioCtx.currentTime, 0.5);
+          this.gainNode.gain.setTargetAtTime(0.2, this.audioCtx.currentTime, 0.5);
+        }
+      }, 1000);
     }
   }
 
@@ -166,26 +178,25 @@ export class Player {
     this.mesh.scale.z = THREE.MathUtils.lerp(this.mesh.scale.z, 1, 0.1);
 
     this.checkCollisions();
+    this.updateAtmosphereEffect();
 
     // TURBO
     this.isTurbo = this.keys.boost && this.turboEnergy > 0;
     if (this.isTurbo) { this.turboEnergy -= 35 * delta; } else { this.turboEnergy = Math.min(100, this.turboEnergy + 25 * delta); }
     if (this.turboFill) this.turboFill.style.width = `${this.turboEnergy}%`;
 
-    // 3D ROTATION (Pitch, Yaw, Roll)
+    // 3D ROTATION
     if (this.keys.up) this.mesh.rotateX(this.turnSpeed * delta);
     if (this.keys.down) this.mesh.rotateX(-this.turnSpeed * delta);
     if (this.keys.left) this.mesh.rotateY(this.turnSpeed * delta);
     if (this.keys.right) this.mesh.rotateY(-this.turnSpeed * delta);
 
-    // Auto-roll when turning
     const targetRoll = this.keys.left ? 0.5 : (this.keys.right ? -0.5 : 0);
-    // Creiamo un effetto roll fluido
     const currentEuler = new THREE.Euler().setFromQuaternion(this.mesh.quaternion);
     currentEuler.z = THREE.MathUtils.lerp(currentEuler.z, targetRoll, 0.1);
     this.mesh.quaternion.setFromEuler(currentEuler);
 
-    // THRUST (Move in local direction)
+    // THRUST & CRUISE
     const direction = new THREE.Vector3(0, 0, 1);
     direction.applyQuaternion(this.mesh.quaternion);
 
@@ -193,20 +204,54 @@ export class Player {
     if (this.keys.forward) this.velocity.addScaledVector(direction, currentAccel * delta);
     if (this.keys.backward) this.velocity.addScaledVector(direction, -currentAccel * delta);
 
+    // CRUISE CONTROL LOGIC
+    if (this.isCruise && this.velocity.length() < 30) {
+       this.velocity.addScaledVector(direction, this.baseAcceleration * 0.5 * delta);
+    }
+
     this.mesh.position.add(this.velocity.clone().multiplyScalar(delta));
-    this.velocity.multiplyScalar(this.deceleration);
+    
+    // Se cruise è attivo, rallenta meno
+    const currentDecel = this.isCruise ? 0.998 : this.deceleration;
+    this.velocity.multiplyScalar(currentDecel);
 
     this.updateRibbonTrails();
     this.updateRadar();
 
-    // UI & Audio
+    // UI
     const speedKmh = Math.round(this.velocity.length() * 10);
-    if (this.speedDisplay) this.speedDisplay.innerText = speedKmh.toString().padStart(3, '0');
+    if (this.speedDisplay) {
+      this.speedDisplay.innerText = speedKmh.toString().padStart(3, '0');
+      this.speedDisplay.style.color = this.isCruise ? '#ffaa00' : '#00ffff';
+    }
+    if (this.statusText) {
+      this.statusText.innerText = this.isCruise ? 'SYSTEM STATUS: CRUISE ACTIVE' : 'SYSTEM STATUS: OPTIMAL';
+    }
 
-    if (this.audioStarted) {
+    // Audio
+    if (this.audioStarted && !this.isWarping) {
       const speedFactor = Math.min(1, this.velocity.length() / 150);
       this.engineFilter.frequency.setTargetAtTime(100 + speedFactor * 500 + (this.isTurbo ? 800 : 0), this.audioCtx.currentTime, 0.2);
       this.gainNode.gain.setTargetAtTime(0.1 + speedFactor * 0.4 + (this.isTurbo ? 0.4 : 0), this.audioCtx.currentTime, 0.2);
+    }
+  }
+
+  updateAtmosphereEffect() {
+    // Cerca la Terra
+    const earth = this.planets.find(p => p.name === 'Terra');
+    if (earth) {
+      const dist = this.mesh.position.distanceTo(earth.mesh.position);
+      const intensity = Math.max(0, 1 - (dist - 150) / 200); // Inizia a scaldarsi a 350 unità
+      
+      if (intensity > 0) {
+        this.nose.material.emissive.setHex(0xff3300);
+        this.nose.material.emissiveIntensity = intensity * 5;
+        this.nose.material.color.setRGB(1, 1 - intensity, 1 - intensity);
+      } else {
+        this.nose.material.emissive.setHex(0x00ffff);
+        this.nose.material.emissiveIntensity = 0.05;
+        this.nose.material.color.setRGB(1, 1, 1);
+      }
     }
   }
 
@@ -227,9 +272,7 @@ export class Player {
   showWarning() {
     if (this.warningHUD) {
       this.warningHUD.style.display = 'block';
-      this.statusText.innerText = 'SYSTEM STATUS: CRITICAL ERROR';
-      this.statusText.style.color = '#ff0000';
-      setTimeout(() => { this.warningHUD.style.display = 'none'; this.statusText.innerText = 'SYSTEM STATUS: OPTIMAL'; this.statusText.style.color = '#ffaa00'; }, 1000);
+      setTimeout(() => { this.warningHUD.style.display = 'none'; }, 1000);
     }
   }
 
@@ -257,9 +300,9 @@ export class Player {
     this.planets.forEach(p => {
       const relPos = p.mesh.position.clone().sub(this.mesh.position);
       const dist = relPos.length();
-      if (dist < 20000) {
-        const x = (relPos.x / 20000) * 75 + 75;
-        const y = (relPos.z / 20000) * 75 + 75;
+      if (dist < 40000) {
+        const x = (relPos.x / 40000) * 75 + 75;
+        const y = (relPos.z / 40000) * 75 + 75;
         const dot = document.createElement('div');
         dot.className = 'radar-dot';
         dot.style.cssText = `position:absolute;left:${x}px;top:${y}px;width:5px;height:5px;background:#00ffff;border-radius:50%;box-shadow:0 0 8px #00ffff;`;
