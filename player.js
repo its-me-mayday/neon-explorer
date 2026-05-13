@@ -4,7 +4,7 @@ export class Player {
   constructor(scene, planets, environment) {
     this.scene = scene;
     this.planets = planets;
-    this.asteroids = environment.asteroids || []; // Riceviamo gli asteroidi per le collisioni
+    this.asteroids = environment.asteroids || [];
     this.mesh = new THREE.Group();
     
     this.shipTexture = this.createShipTexture();
@@ -14,30 +14,37 @@ export class Player {
     this.darkMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.9, roughness: 0.1 });
 
     this.buildShip();
-    this.mesh.position.y = 1;
+    this.mesh.position.set(0, 0, 0);
     this.scene.add(this.mesh);
 
-    // FISICA
+    // FISICA 3D
     this.velocity = new THREE.Vector3();
-    this.rotationSpeed = 4.0;
-    this.baseAcceleration = 65;
-    this.turboAcceleration = 180;
-    this.deceleration = 0.97;
+    this.turnSpeed = 2.5; // Yaw/Pitch speed
+    this.rollSpeed = 1.5;
+    this.baseAcceleration = 70;
+    this.turboAcceleration = 200;
+    this.deceleration = 0.98;
     
     this.isTurbo = false;
     this.turboEnergy = 100;
     this.isWarping = false;
 
-    // SCIE A NASTRO (Ribbon Trails)
-    this.trailPoints = [[], [], [], []]; // Una lista di punti per ogni motore
+    // SCIE
+    this.trailPoints = [[], [], [], []];
     this.trailMeshes = [];
     this.setupTrails();
 
-    this.keys = { forward: false, backward: false, left: false, right: false, boost: false };
+    // INPUT (Aggiunti tasti per Pitch)
+    this.keys = { 
+      forward: false, backward: false, 
+      left: false, right: false, 
+      up: false, down: false,
+      boost: false 
+    };
+    
     window.addEventListener('keydown', (e) => this.handleKeyDown(e));
     window.addEventListener('keyup', (e) => this.handleKeyUp(e));
 
-    // UI
     this.speedDisplay = document.getElementById('speed-display');
     this.turboFill = document.getElementById('turbo-fill');
     this.warningHUD = document.getElementById('warning');
@@ -48,8 +55,7 @@ export class Player {
   }
 
   createShipTexture() {
-    const canvas = document.createElement('canvas');
-    canvas.width = 512; canvas.height = 512;
+    const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 512;
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#eeeeee'; ctx.fillRect(0, 0, 512, 512);
     ctx.strokeStyle = '#aaaaaa'; ctx.lineWidth = 2;
@@ -94,7 +100,7 @@ export class Player {
   setupTrails() {
     const trailMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
     for (let i = 0; i < 4; i++) {
-      const geo = new THREE.PlaneGeometry(0.4, 1, 1, 20); // Geometria che fungerà da nastro
+      const geo = new THREE.PlaneGeometry(0.4, 1, 1, 10);
       const mesh = new THREE.Mesh(geo, trailMat.clone());
       mesh.frustumCulled = false;
       this.scene.add(mesh);
@@ -121,10 +127,12 @@ export class Player {
   handleKeyDown(e) {
     if (!this.audioStarted) { this.audioCtx.resume(); this.audioStarted = true; }
     switch (e.code) {
-      case 'KeyW': case 'ArrowUp': this.keys.forward = true; break;
-      case 'KeyS': case 'ArrowDown': this.keys.backward = true; break;
-      case 'KeyA': case 'ArrowLeft': this.keys.left = true; break;
-      case 'KeyD': case 'ArrowRight': this.keys.right = true; break;
+      case 'KeyW': this.keys.forward = true; break;
+      case 'KeyS': this.keys.backward = true; break;
+      case 'KeyA': this.keys.left = true; break;
+      case 'KeyD': this.keys.right = true; break;
+      case 'ArrowUp': this.keys.up = true; break;
+      case 'ArrowDown': this.keys.down = true; break;
       case 'ShiftLeft': case 'ShiftRight': this.keys.boost = true; break;
       case 'Space': this.startWarp(); break;
     }
@@ -132,21 +140,23 @@ export class Player {
 
   handleKeyUp(e) {
     switch (e.code) {
-      case 'KeyW': case 'ArrowUp': this.keys.forward = false; break;
-      case 'KeyS': case 'ArrowDown': this.keys.backward = false; break;
-      case 'KeyA': case 'ArrowLeft': this.keys.left = false; break;
-      case 'KeyD': case 'ArrowRight': this.keys.right = false; break;
+      case 'KeyW': this.keys.forward = false; break;
+      case 'KeyS': this.keys.backward = false; break;
+      case 'KeyA': this.keys.left = false; break;
+      case 'KeyD': this.keys.right = false; break;
+      case 'ArrowUp': this.keys.up = false; break;
+      case 'ArrowDown': this.keys.down = false; break;
       case 'ShiftLeft': case 'ShiftRight': this.keys.boost = false; break;
     }
   }
 
   startWarp() {
     if (this.isWarping || !this.planets) return;
-    let nextPlanet = null; let minDiff = Infinity; const currentZ = this.mesh.position.z;
-    this.planets.forEach(p => { const diff = p.mesh.position.z - currentZ; if (diff > 1000 && diff < minDiff) { minDiff = diff; nextPlanet = p; } });
+    let nextPlanet = null; let minDiff = Infinity; const currentPos = this.mesh.position;
+    this.planets.forEach(p => { const diff = p.mesh.position.z - currentPos.z; if (diff > 1000 && diff < minDiff) { minDiff = diff; nextPlanet = p; } });
     if (nextPlanet) {
       this.isWarping = true;
-      this.warpTarget = nextPlanet.mesh.position.clone().add(new THREE.Vector3(0, 100, -300));
+      this.warpTarget = nextPlanet.mesh.position.clone().add(new THREE.Vector3(0, 100, -400));
       setTimeout(() => { this.mesh.position.copy(this.warpTarget); this.velocity.set(0, 0, 50); this.isWarping = false; }, 1000);
     }
   }
@@ -155,16 +165,27 @@ export class Player {
     if (this.isWarping) { this.mesh.scale.z = 5; return; }
     this.mesh.scale.z = THREE.MathUtils.lerp(this.mesh.scale.z, 1, 0.1);
 
-    // Collision Detection
     this.checkCollisions();
 
+    // TURBO
     this.isTurbo = this.keys.boost && this.turboEnergy > 0;
     if (this.isTurbo) { this.turboEnergy -= 35 * delta; } else { this.turboEnergy = Math.min(100, this.turboEnergy + 25 * delta); }
     if (this.turboFill) this.turboFill.style.width = `${this.turboEnergy}%`;
 
-    if (this.keys.left) this.mesh.rotation.y += this.rotationSpeed * delta;
-    if (this.keys.right) this.mesh.rotation.y -= this.rotationSpeed * delta;
+    // 3D ROTATION (Pitch, Yaw, Roll)
+    if (this.keys.up) this.mesh.rotateX(this.turnSpeed * delta);
+    if (this.keys.down) this.mesh.rotateX(-this.turnSpeed * delta);
+    if (this.keys.left) this.mesh.rotateY(this.turnSpeed * delta);
+    if (this.keys.right) this.mesh.rotateY(-this.turnSpeed * delta);
 
+    // Auto-roll when turning
+    const targetRoll = this.keys.left ? 0.5 : (this.keys.right ? -0.5 : 0);
+    // Creiamo un effetto roll fluido
+    const currentEuler = new THREE.Euler().setFromQuaternion(this.mesh.quaternion);
+    currentEuler.z = THREE.MathUtils.lerp(currentEuler.z, targetRoll, 0.1);
+    this.mesh.quaternion.setFromEuler(currentEuler);
+
+    // THRUST (Move in local direction)
     const direction = new THREE.Vector3(0, 0, 1);
     direction.applyQuaternion(this.mesh.quaternion);
 
@@ -175,13 +196,10 @@ export class Player {
     this.mesh.position.add(this.velocity.clone().multiplyScalar(delta));
     this.velocity.multiplyScalar(this.deceleration);
 
-    // Update Trails
     this.updateRibbonTrails();
-
-    // Update Radar
     this.updateRadar();
 
-    // Audio & UI
+    // UI & Audio
     const speedKmh = Math.round(this.velocity.length() * 10);
     if (this.speedDisplay) this.speedDisplay.innerText = speedKmh.toString().padStart(3, '0');
 
@@ -196,14 +214,10 @@ export class Player {
     const shipPos = this.mesh.position;
     for (let asteroid of this.asteroids) {
       const dist = shipPos.distanceTo(asteroid.position);
-      const minCollideDist = 15 + asteroid.scale.x * 0.5; // Margine di collisione dinamico
-      
+      const minCollideDist = 15 + asteroid.scale.x * 0.5;
       if (dist < minCollideDist) {
-        // Rimbalzo
         const bounceDir = shipPos.clone().sub(asteroid.position).normalize();
-        this.velocity.copy(bounceDir.multiplyScalar(30));
-        
-        // Feedback HUD
+        this.velocity.copy(bounceDir.multiplyScalar(40));
         this.showWarning();
         return;
       }
@@ -215,11 +229,7 @@ export class Player {
       this.warningHUD.style.display = 'block';
       this.statusText.innerText = 'SYSTEM STATUS: CRITICAL ERROR';
       this.statusText.style.color = '#ff0000';
-      setTimeout(() => {
-        this.warningHUD.style.display = 'none';
-        this.statusText.innerText = 'SYSTEM STATUS: OPTIMAL';
-        this.statusText.style.color = '#ffaa00';
-      }, 1000);
+      setTimeout(() => { this.warningHUD.style.display = 'none'; this.statusText.innerText = 'SYSTEM STATUS: OPTIMAL'; this.statusText.style.color = '#ffaa00'; }, 1000);
     }
   }
 
@@ -227,38 +237,32 @@ export class Player {
     this.enginePositions.forEach((pos, i) => {
       const worldPos = new THREE.Vector3(pos.x, pos.y, pos.z - 0.5);
       worldPos.applyMatrix4(this.mesh.matrixWorld);
-      
       const pts = this.trailPoints[i];
       pts.unshift(worldPos.clone());
-      if (pts.length > 20) pts.pop();
-
+      if (pts.length > 15) pts.pop();
       if (pts.length > 1) {
         const mesh = this.trailMeshes[i];
-        // Semplice aggiornamento visivo: spostiamo la mesh e la scaliamo
         mesh.position.copy(pts[0]);
         mesh.lookAt(pts[pts.length-1]);
         mesh.scale.z = pts[0].distanceTo(pts[pts.length-1]) || 0.1;
         mesh.material.opacity = this.isTurbo ? 0.8 : 0.4;
-        mesh.material.color.setHex(this.isTurbo ? 0xffffff : 0x00ffff);
       }
     });
   }
 
   updateRadar() {
     if (!this.radar) return;
-    // Pulisci vecchi punti
     const dots = this.radar.querySelectorAll('.radar-dot');
     dots.forEach(d => d.remove());
-
     this.planets.forEach(p => {
       const relPos = p.mesh.position.clone().sub(this.mesh.position);
       const dist = relPos.length();
-      if (dist < 15000) {
-        const x = (relPos.x / 15000) * 75 + 75;
-        const y = (relPos.z / 15000) * 75 + 75;
+      if (dist < 20000) {
+        const x = (relPos.x / 20000) * 75 + 75;
+        const y = (relPos.z / 20000) * 75 + 75;
         const dot = document.createElement('div');
         dot.className = 'radar-dot';
-        dot.style.cssText = `position:absolute;left:${x}px;top:${y}px;width:4px;height:4px;background:#00ffff;border-radius:50%;box-shadow:0 0 5px #00ffff;`;
+        dot.style.cssText = `position:absolute;left:${x}px;top:${y}px;width:5px;height:5px;background:#00ffff;border-radius:50%;box-shadow:0 0 8px #00ffff;`;
         this.radar.appendChild(dot);
       }
     });
