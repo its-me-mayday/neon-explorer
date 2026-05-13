@@ -6,7 +6,7 @@ export function setupEnvironment(scene) {
   const starsCount = 15000;
   const positions = new Float32Array(starsCount * 3);
   for (let i = 0; i < starsCount * 3; i++) {
-    positions[i] = (Math.random() - 0.5) * 15000;
+    positions[i] = (Math.random() - 0.5) * 20000;
   }
   starsGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   const starsMat = new THREE.PointsMaterial({ size: 1.5, color: 0xffffff, sizeAttenuation: false });
@@ -21,8 +21,15 @@ export function setupEnvironment(scene) {
     if (name === 'Sole') { mat.emissive = new THREE.Color(color); mat.emissiveIntensity = 2; }
     const planet = new THREE.Mesh(geo, mat);
     planet.position.z = distance;
-    planet.position.x = (Math.random() - 0.5) * distance * 0.3;
+    planet.position.x = (Math.random() - 0.5) * distance * 0.2;
     scene.add(planet);
+
+    // Rotazione casuale iniziale
+    planet.rotation.y = Math.random() * Math.PI;
+    
+    // Velocità di rotazione specifica
+    const rotationSpeed = (Math.random() * 0.005) + 0.001;
+
     if (hasRings) {
       const ringGeo = new THREE.TorusGeometry(radius * 2, radius * 0.1, 2, 100);
       const ringMat = new THREE.MeshStandardMaterial({ color: 0x887766, transparent: true, opacity: 0.6 });
@@ -30,7 +37,8 @@ export function setupEnvironment(scene) {
       rings.rotation.x = Math.PI / 2.5;
       planet.add(rings);
     }
-    return { name, mesh: planet };
+
+    return { name, mesh: planet, rotationSpeed };
   };
 
   planets.push(createPlanet('Sole', 150, 0xffaa00, -1000));
@@ -38,27 +46,29 @@ export function setupEnvironment(scene) {
   planets.push(createPlanet('Venere', 12, 0xeeb83f, 1800));
   planets.push(createPlanet('Terra', 12.5, 0x2233ff, 3000));
   planets.push(createPlanet('Marte', 6.5, 0xff3300, 4500));
-  planets.push(createPlanet('Giove', 55, 0xd39c7e, 8000));
-  planets.push(createPlanet('Saturno', 48, 0xc5ab6e, 12000, true));
+  planets.push(createPlanet('Giove', 55, 0xd39c7e, 10000)); // Distanziati di più per far posto agli asteroidi
+  planets.push(createPlanet('Saturno', 48, 0xc5ab6e, 14000, true));
 
-  // --- FASCIA DI ASTEROIDI ---
-  const asteroidCount = 1000;
-  const asteroidGeo = new THREE.DodecahedronGeometry(1, 1); // Forma rocciosa irregolare
+  // --- FASCIA DI ASTEROIDI (TRA MARTE E GIOVE) ---
+  const asteroidCount = 1200;
+  const asteroidGeo = new THREE.DodecahedronGeometry(1, 1);
   const asteroidMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.9 });
 
   for (let i = 0; i < asteroidCount; i++) {
     const asteroid = new THREE.Mesh(asteroidGeo, asteroidMat);
     
-    // Distribuzione casuale nello spazio tra i pianeti
-    const dist = 3000 + Math.random() * 8000;
+    // Posizionati tra Marte (4500) e Giove (10000)
+    const dist = 5500 + Math.random() * 3500;
     const angle = Math.random() * Math.PI * 2;
+    const radius = 500 + Math.random() * 2500; // Larghezza della fascia
+    
     asteroid.position.set(
-      Math.cos(angle) * (500 + Math.random() * 2000),
-      (Math.random() - 0.5) * 500,
+      Math.cos(angle) * radius,
+      (Math.random() - 0.5) * 800,
       dist
     );
     
-    const scale = 1 + Math.random() * 5;
+    const scale = 2 + Math.random() * 8;
     asteroid.scale.set(scale, scale, scale);
     asteroid.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
     

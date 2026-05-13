@@ -9,7 +9,7 @@ import { Player } from './player.js';
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000); 
 
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 50000); // Far clipping esteso per i pianeti
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 100000); 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
@@ -24,22 +24,26 @@ const composer = new EffectComposer(renderer);
 composer.addPass(renderScene);
 composer.addPass(bloomPass);
 
-// Environment (Riceviamo i pianeti)
+// Environment
 const { planets } = setupEnvironment(scene);
 
-// Player
-const player = new Player(scene);
+// Player (Ora passiamo i pianeti al costruttore)
+const player = new Player(scene, planets);
 
 // LIGHTING
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); 
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); 
 scene.add(ambientLight);
 
+const starLight = new THREE.DirectionalLight(0xffffff, 1.2);
+starLight.position.set(50, 100, 50);
+scene.add(starLight);
+
 // Headlight
-const headLight = new THREE.SpotLight(0xffffff, 15, 60, Math.PI / 6, 0.5);
+const headLight = new THREE.SpotLight(0xffffff, 15, 80, Math.PI / 6, 0.5);
 scene.add(headLight);
 scene.add(headLight.target);
 
-// HUD Elements
+// HUD
 const planetDisplay = document.getElementById('planet-name');
 const distanceDisplay = document.getElementById('planet-distance');
 
@@ -57,12 +61,17 @@ function animate() {
   const delta = 0.016; 
   player.update(delta);
   
+  // Rotazione dei Pianeti
+  planets.forEach(p => {
+    p.mesh.rotation.y += p.rotationSpeed;
+  });
+
   // Camera Effects
-  const targetFOV = player.isTurbo ? 95 : 75;
+  const targetFOV = player.isTurbo ? 95 : (player.isWarping ? 120 : 75);
   camera.fov = THREE.MathUtils.lerp(camera.fov, targetFOV, 0.1);
   camera.updateProjectionMatrix();
 
-  const targetDist = player.isTurbo ? -16 : -12;
+  const targetDist = player.isWarping ? -30 : (player.isTurbo ? -16 : -12);
   const relativeCameraOffset = new THREE.Vector3(0, 5, targetDist);
   const cameraOffset = relativeCameraOffset.applyMatrix4(player.mesh.matrixWorld);
   camera.position.lerp(cameraOffset, 0.08);

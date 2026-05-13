@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 
 export class Player {
-  constructor(scene) {
+  constructor(scene, planets) {
     this.scene = scene;
+    this.planets = planets;
     this.mesh = new THREE.Group();
     
     // MATERIALI
@@ -20,21 +21,22 @@ export class Player {
     this.baseAcceleration = 50;
     this.turboAcceleration = 140;
     this.deceleration = 0.96;
-    this.isTurbo = false;
-    this.turboEnergy = 100;
+    
+    // WARP LOGIC
+    this.isWarping = false;
+    this.warpTarget = null;
 
     // SCIE
     this.trails = [];
     this.trailTimer = 0;
 
-    this.keys = { forward: false, backward: false, left: false, right: false, boost: false };
+    this.keys = { forward: false, backward: false, left: false, right: false, boost: false, warp: false };
     window.addEventListener('keydown', (e) => this.onKeyDown(e));
     window.addEventListener('keyup', (e) => this.onKeyUp(e));
 
     this.speedDisplay = document.getElementById('speed-display');
     this.turboFill = document.getElementById('turbo-fill');
 
-    // NUOVO AUDIO (White Noise Based)
     this.setupAudio();
   }
 
@@ -83,42 +85,24 @@ export class Player {
 
   setupAudio() {
     this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    
-    // Generatore di Rumore Bianco
     const bufferSize = 2 * this.audioCtx.sampleRate;
     const noiseBuffer = this.audioCtx.createBuffer(1, bufferSize, this.audioCtx.sampleRate);
     const output = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      output[i] = Math.random() * 2 - 1;
-    }
-
+    for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
     this.noiseSource = this.audioCtx.createBufferSource();
     this.noiseSource.buffer = noiseBuffer;
     this.noiseSource.loop = true;
-
-    // Filtro per il rombo del motore (Passa-Basso)
     this.engineFilter = this.audioCtx.createBiquadFilter();
     this.engineFilter.type = 'lowpass';
     this.engineFilter.frequency.setValueAtTime(100, this.audioCtx.currentTime);
-    this.engineFilter.Q.setValueAtTime(1, this.audioCtx.currentTime);
-
     this.gainNode = this.audioCtx.createGain();
     this.gainNode.gain.setValueAtTime(0, this.audioCtx.currentTime);
-
-    // Connessione catena audio
     this.noiseSource.connect(this.engineFilter);
     this.engineFilter.connect(this.gainNode);
     this.gainNode.connect(this.audioCtx.destination);
-
     this.noiseSource.start();
     this.audioStarted = false;
-
-    window.addEventListener('keydown', () => {
-      if (!this.audioStarted) {
-        this.audioCtx.resume();
-        this.audioStarted = true;
-      }
-    }, { once: true });
+    window.addEventListener('keydown', () => { if (!this.audioStarted) { this.audioCtx.resume(); this.audioStarted = true; } }, { once: true });
   }
 
   onKeyDown(e) {
@@ -128,6 +112,7 @@ export class Player {
       case 'KeyA': case 'ArrowLeft': this.keys.left = true; break;
       case 'KeyD': case 'ArrowRight': this.keys.right = true; break;
       case 'ShiftLeft': case 'ShiftRight': this.keys.boost = true; break;
+      case 'Space': this.startWarp(); break;
     }
   }
 
@@ -141,14 +126,55 @@ export class Player {
     }
   }
 
+  startWarp() {
+    if (this.isWarping || !this.planets) return;
+    
+    // Trova il prossimo pianeta più lontano
+    let nextPlanet = null;
+    let minDiff = Infinity;
+    const currentZ = this.mesh.position.z;
+
+    this.planets.forEach(p => {
+      const diff = p.mesh.position.z - currentZ;
+      if (diff > 500 && diff < minDiff) {
+        minDiff = diff;
+        nextPlanet = p;
+      }
+    });
+
+    if (nextPlanet) {
+      this.isWarping = true;
+      this.warpTarget = nextPlanet.mesh.position.clone().add(new THREE.Vector3(0, 50, -200));
+      
+      // Suono Warp (Salita rapida di frequenza)
+      if (this.audioStarted) {
+        this.engineFilter.frequency.exponentialRampToValueAtTime(8000, this.audioCtx.currentTime + 0.5);
+        this.gainNode.gain.exponentialRampToValueAtTime(0.8, this.audioCtx.currentTime + 0.5);
+      }
+
+      setTimeout(() => {
+        this.mesh.position.copy(this.warpTarget);
+        this.velocity.set(0, 0, 50); // Mantiene un po' di velocità dopo il salto
+        this.isWarping = false;
+        
+        if (this.audioStarted) {
+          this.engineFilter.frequency.exponentialRampToValueAtTime(200, this.audioCtx.currentTime + 0.5);
+        }
+      }, 1000);
+    }
+  }
+
   update(delta) {
-    this.isTurbo = this.keys.boost && this.turboEnergy > 0;
-    if (this.isTurbo) {
-      this.turboEnergy -= 40 * delta;
+    if (this.isWarping) {
+      // Effetto visivo warp
+      this.mesh.scale.z = 5;
+      return;
     } else {
-      this.turboEnergy = Math.min(100, this.turboEnergy + 15 * delta);
+      this.mesh.scale.z = THREE.MathUtils.lerp(this.mesh.scale.z, 1, 0.1);
     }
 
+    this.isTurbo = this.keys.boost && this.turboEnergy > 0;
+    if (this.isTurbo) { this.turboEnergy -= 40 * delta; } else { this.turboEnergy = Math.min(100, this.turboEnergy + 15 * delta); }
     if (this.turboFill) this.turboFill.style.width = `${this.turboEnergy}%`;
 
     if (this.keys.left) this.mesh.rotation.y += this.rotationSpeed * delta;
@@ -170,15 +196,10 @@ export class Player {
     const speedKmh = Math.round(this.velocity.length() * 10);
     if (this.speedDisplay) this.speedDisplay.innerText = speedKmh.toString().padStart(3, '0');
 
-    // --- AUDIO UPDATE (PLEASANT WHITE NOISE) ---
     if (this.audioStarted) {
       const speedFactor = Math.min(1, this.velocity.length() / 100);
-      
-      // Il motore diventa più "aperto" (frequenze alte) mentre acceleri
       const targetFreq = 50 + speedFactor * 400 + (this.isTurbo ? 600 : 0);
       this.engineFilter.frequency.setTargetAtTime(targetFreq, this.audioCtx.currentTime, 0.2);
-      
-      // Volume più alto durante l'accelerazione o il turbo
       const targetGain = 0.1 + speedFactor * 0.3 + (this.isTurbo ? 0.4 : 0);
       this.gainNode.gain.setTargetAtTime(targetGain, this.audioCtx.currentTime, 0.2);
     }
