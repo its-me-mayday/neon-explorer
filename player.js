@@ -17,14 +17,19 @@ export class Player {
     this.mesh.position.set(0, 0, 0);
     this.scene.add(this.mesh);
 
-    // FISICA
+    // FISICA 3D PROFESSIONALE
     this.velocity = new THREE.Vector3();
-    this.turnSpeed = 2.5;
-    this.baseAcceleration = 70;
-    this.turboAcceleration = 200;
-    this.deceleration = 0.98;
+    this.rotationQuaternion = new THREE.Quaternion();
     
-    // STATI
+    // Velocità di manovra
+    this.pitchSpeed = 1.8;
+    this.yawSpeed = 1.8;
+    this.rollSpeed = 2.5; // Più veloce per le acrobazie
+    
+    this.baseAcceleration = 75;
+    this.turboAcceleration = 220;
+    this.deceleration = 0.985;
+    
     this.isTurbo = false;
     this.isCruise = false;
     this.turboEnergy = 100;
@@ -36,12 +41,19 @@ export class Player {
     this.trailMeshes = [];
     this.setupTrails();
 
-    // INPUT
-    this.keys = { forward: false, backward: false, left: false, right: false, up: false, down: false, boost: false };
+    // INPUT (Aggiunti Q ed E)
+    this.keys = { 
+      forward: false, backward: false, 
+      left: false, right: false, 
+      up: false, down: false,
+      rollLeft: false, rollRight: false,
+      boost: false 
+    };
+    
     window.addEventListener('keydown', (e) => this.handleKeyDown(e));
     window.addEventListener('keyup', (e) => this.handleKeyUp(e));
 
-    // UI ELEMENTS
+    // UI
     this.speedDisplay = document.getElementById('speed-display');
     this.turboFill = document.getElementById('turbo-fill');
     this.warningHUD = document.getElementById('warning');
@@ -127,8 +139,10 @@ export class Player {
       case 'KeyS': this.keys.backward = true; this.isCruise = false; break;
       case 'KeyA': this.keys.left = true; break;
       case 'KeyD': this.keys.right = true; break;
+      case 'KeyQ': this.keys.rollLeft = true; break; // Acrobatics
+      case 'KeyE': this.keys.rollRight = true; break; // Acrobatics
       case 'KeyC': this.isCruise = !this.isCruise; break;
-      case 'KeyI': this.toggleLegend(); break; // Toggle Legend
+      case 'KeyI': this.toggleLegend(); break;
       case 'ArrowUp': this.keys.up = true; break;
       case 'ArrowDown': this.keys.down = true; break;
       case 'ShiftLeft': case 'ShiftRight': this.keys.boost = true; break;
@@ -142,6 +156,8 @@ export class Player {
       case 'KeyS': this.keys.backward = false; break;
       case 'KeyA': this.keys.left = false; break;
       case 'KeyD': this.keys.right = false; break;
+      case 'KeyQ': this.keys.rollLeft = false; break;
+      case 'KeyE': this.keys.rollRight = false; break;
       case 'ArrowUp': this.keys.up = false; break;
       case 'ArrowDown': this.keys.down = false; break;
       case 'ShiftLeft': case 'ShiftRight': this.keys.boost = false; break;
@@ -150,9 +166,7 @@ export class Player {
 
   toggleLegend() {
     this.legendVisible = !this.legendVisible;
-    if (this.legend) {
-      this.legend.style.display = this.legendVisible ? 'block' : 'none';
-    }
+    if (this.legend) { this.legend.style.display = this.legendVisible ? 'block' : 'none'; }
   }
 
   startWarp() {
@@ -174,19 +188,24 @@ export class Player {
     this.checkCollisions();
     this.updateAtmosphereEffect();
 
+    // ROTAZIONE PROFESSIONALE (QUATERNIONS)
+    const pitch = (this.keys.up ? 1 : 0) - (this.keys.down ? 1 : 0);
+    const yaw = (this.keys.left ? 1 : 0) - (this.keys.right ? 1 : 0);
+    const roll = (this.keys.rollLeft ? 1 : 0) - (this.keys.rollRight ? 1 : 0);
+
+    // Applichiamo le rotazioni rispetto agli assi locali della nave
+    if (pitch !== 0) this.mesh.rotateX(pitch * this.pitchSpeed * delta);
+    if (yaw !== 0) this.mesh.rotateY(yaw * this.yawSpeed * delta);
+    if (roll !== 0) this.mesh.rotateZ(roll * this.rollSpeed * delta);
+
+    // Auto-roll visivo leggero durante lo yaw (senza influenzare il quaternione permanente)
+    const visualRoll = THREE.MathUtils.lerp(0, yaw * 0.4, 0.1);
+    // Nota: preferiamo lasciare il rollio manuale puro per evitare confusioni nell'input
+
+    // FISICA & TURBO
     this.isTurbo = this.keys.boost && this.turboEnergy > 0;
     if (this.isTurbo) { this.turboEnergy -= 35 * delta; } else { this.turboEnergy = Math.min(100, this.turboEnergy + 25 * delta); }
     if (this.turboFill) this.turboFill.style.width = `${this.turboEnergy}%`;
-
-    if (this.keys.up) this.mesh.rotateX(this.turnSpeed * delta);
-    if (this.keys.down) this.mesh.rotateX(-this.turnSpeed * delta);
-    if (this.keys.left) this.mesh.rotateY(this.turnSpeed * delta);
-    if (this.keys.right) this.mesh.rotateY(-this.turnSpeed * delta);
-
-    const targetRoll = this.keys.left ? 0.5 : (this.keys.right ? -0.5 : 0);
-    const currentEuler = new THREE.Euler().setFromQuaternion(this.mesh.quaternion);
-    currentEuler.z = THREE.MathUtils.lerp(currentEuler.z, targetRoll, 0.1);
-    this.mesh.quaternion.setFromEuler(currentEuler);
 
     const direction = new THREE.Vector3(0, 0, 1);
     direction.applyQuaternion(this.mesh.quaternion);
@@ -203,10 +222,9 @@ export class Player {
     this.updateRibbonTrails();
     this.updateRadar();
 
+    // UI & Audio
     const speedKmh = Math.round(this.velocity.length() * 10);
     if (this.speedDisplay) { this.speedDisplay.innerText = speedKmh.toString().padStart(3, '0'); this.speedDisplay.style.color = this.isCruise ? '#ffaa00' : '#00ffff'; }
-    if (this.statusText) { this.statusText.innerText = this.isCruise ? 'SYSTEM STATUS: CRUISE ACTIVE' : 'SYSTEM STATUS: OPTIMAL'; }
-
     if (this.audioStarted && !this.isWarping) {
       const speedFactor = Math.min(1, this.velocity.length() / 150);
       this.engineFilter.frequency.setTargetAtTime(100 + speedFactor * 500 + (this.isTurbo ? 800 : 0), this.audioCtx.currentTime, 0.2);
@@ -219,7 +237,7 @@ export class Player {
     if (earth) {
       const dist = this.mesh.position.distanceTo(earth.mesh.position);
       const intensity = Math.max(0, 1 - (dist - 150) / 200);
-      if (intensity > 0) { this.nose.material.emissive.setHex(0xff3300); this.nose.material.emissiveIntensity = intensity * 5; this.nose.material.color.setRGB(1, 1 - intensity, 1 - intensity); } else { this.nose.material.emissive.setHex(0x00ffff); this.nose.material.emissiveIntensity = 0.05; this.nose.material.color.setRGB(1, 1, 1); }
+      if (intensity > 0) { this.nose.material.emissive.setHex(0xff3300); this.nose.material.emissiveIntensity = intensity * 5; } else { this.nose.material.emissive.setHex(0x00ffff); this.nose.material.emissiveIntensity = 0.05; }
     }
   }
 
@@ -232,9 +250,7 @@ export class Player {
     }
   }
 
-  showWarning() {
-    if (this.warningHUD) { this.warningHUD.style.display = 'block'; setTimeout(() => { this.warningHUD.style.display = 'none'; }, 1000); }
-  }
+  showWarning() { if (this.warningHUD) { this.warningHUD.style.display = 'block'; setTimeout(() => { this.warningHUD.style.display = 'none'; }, 1000); } }
 
   updateRibbonTrails() {
     this.enginePositions.forEach((pos, i) => {
