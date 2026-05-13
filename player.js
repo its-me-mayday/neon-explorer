@@ -12,48 +12,33 @@ export class Player {
       map: this.shipTexture, color: 0xffffff, metalness: 0.7, roughness: 0.3, emissive: 0x00ffff, emissiveIntensity: 0.05 
     });
     this.darkMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.9, roughness: 0.1 });
+    this.glowMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.9 });
 
     this.buildShip();
+    this.buildShield();
+    
     this.mesh.position.set(0, 0, 0);
     this.scene.add(this.mesh);
 
-    // FISICA 3D PROFESSIONALE
+    // FISICA
     this.velocity = new THREE.Vector3();
-    this.rotationQuaternion = new THREE.Quaternion();
+    this.pitchSpeed = 2.0; this.yawSpeed = 2.0; this.rollSpeed = 2.8;
+    this.baseAcceleration = 75; this.turboAcceleration = 220; this.deceleration = 0.985;
     
-    // Velocità di manovra
-    this.pitchSpeed = 1.8;
-    this.yawSpeed = 1.8;
-    this.rollSpeed = 2.5; // Più veloce per le acrobazie
-    
-    this.baseAcceleration = 75;
-    this.turboAcceleration = 220;
-    this.deceleration = 0.985;
-    
-    this.isTurbo = false;
-    this.isCruise = false;
+    // STATI
+    this.isTurbo = false; this.isCruise = false; this.isWarping = false;
+    this.isLeveling = false; // Stato di riassestamento
     this.turboEnergy = 100;
-    this.isWarping = false;
-    this.legendVisible = true;
+    this.shieldEnergy = 100;
+    this.cameraMode = 'third';
 
-    // SCIE
-    this.trailPoints = [[], [], [], []];
-    this.trailMeshes = [];
-    this.setupTrails();
+    this.trailPoints = [[], [], [], []]; this.trailMeshes = []; this.setupTrails();
 
-    // INPUT (Aggiunti Q ed E)
-    this.keys = { 
-      forward: false, backward: false, 
-      left: false, right: false, 
-      up: false, down: false,
-      rollLeft: false, rollRight: false,
-      boost: false 
-    };
-    
+    // INPUT
+    this.keys = { forward: false, backward: false, left: false, right: false, up: false, down: false, rollLeft: false, rollRight: false, boost: false, level: false };
     window.addEventListener('keydown', (e) => this.handleKeyDown(e));
     window.addEventListener('keyup', (e) => this.handleKeyUp(e));
 
-    // UI
     this.speedDisplay = document.getElementById('speed-display');
     this.turboFill = document.getElementById('turbo-fill');
     this.warningHUD = document.getElementById('warning');
@@ -91,6 +76,9 @@ export class Player {
     const cockpit = new THREE.Mesh(cockpitGeo, this.cockpitMat);
     cockpit.position.set(0, 0.2, 0.4); cockpit.scale.set(1, 0.6, 1.5);
     this.mesh.add(cockpit);
+    this.cameraAnchor = new THREE.Object3D();
+    this.cameraAnchor.position.set(0, 0.35, 0.5);
+    this.mesh.add(this.cameraAnchor);
     const wingShape = new THREE.Shape();
     wingShape.moveTo(0, 0); wingShape.lineTo(2.4, -1.4); wingShape.lineTo(2.4, 0.8); wingShape.lineTo(0, 1.4); wingShape.lineTo(0, 0);
     const wingGeo = new THREE.ExtrudeGeometry(wingShape, { depth: 0.1, bevelEnabled: true, bevelThickness: 0.05 });
@@ -99,19 +87,35 @@ export class Player {
     this.mesh.add(leftWing);
     const rightWing = leftWing.clone(); rightWing.scale.x = -1; rightWing.position.x = 0.3;
     this.mesh.add(rightWing);
+    this.engineCores = [];
     this.enginePositions = [{x:-0.6,y:-0.15,z:-1},{x:0.6,y:-0.15,z:-1},{x:-1.4,y:-0.1,z:-0.3},{x:1.4,y:-0.1,z:-0.3}];
     this.enginePositions.forEach(pos => {
-      const engine = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.28, 1.0, 16), this.darkMat);
-      engine.rotation.x = Math.PI / 2; engine.position.set(pos.x, pos.y, pos.z);
-      this.mesh.add(engine);
+      const engineGroup = new THREE.Group();
+      engineGroup.position.set(pos.x, pos.y, pos.z);
+      engineGroup.rotation.x = Math.PI / 2;
+      const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.25, 0.8, 16, 1, true), this.darkMat);
+      engineGroup.add(nozzle);
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.02, 8, 16), this.hullMat);
+      rim.rotation.x = Math.PI / 2; rim.position.y = -0.4;
+      engineGroup.add(rim);
+      const core = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 12), this.glowMat.clone());
+      core.position.y = -0.3;
+      engineGroup.add(core);
+      this.engineCores.push(core);
+      this.mesh.add(engineGroup);
     });
+  }
+
+  buildShield() {
+    this.shieldMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0, wireframe: true });
+    this.shield = new THREE.Mesh(new THREE.SphereGeometry(3.5, 32, 32), this.shieldMat);
+    this.mesh.add(this.shield);
   }
 
   setupTrails() {
     const trailMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
     for (let i = 0; i < 4; i++) {
-      const geo = new THREE.PlaneGeometry(0.4, 1, 1, 10);
-      const mesh = new THREE.Mesh(geo, trailMat.clone());
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 1, 1, 10), trailMat.clone());
       mesh.frustumCulled = false; this.scene.add(mesh); this.trailMeshes.push(mesh);
     }
   }
@@ -130,17 +134,19 @@ export class Player {
     this.noiseSource.connect(this.engineFilter); this.engineFilter.connect(this.gainNode); this.gainNode.connect(this.audioCtx.destination);
     this.noiseSource.start();
     this.audioStarted = false;
-    window.addEventListener('keydown', () => { if (!this.audioStarted) { this.audioCtx.resume(); this.audioStarted = true; } }, { once: true });
   }
 
   handleKeyDown(e) {
+    if (!this.audioStarted) { this.audioCtx.resume(); this.audioStarted = true; }
     switch (e.code) {
       case 'KeyW': this.keys.forward = true; this.isCruise = false; break;
       case 'KeyS': this.keys.backward = true; this.isCruise = false; break;
       case 'KeyA': this.keys.left = true; break;
       case 'KeyD': this.keys.right = true; break;
-      case 'KeyQ': this.keys.rollLeft = true; break; // Acrobatics
-      case 'KeyE': this.keys.rollRight = true; break; // Acrobatics
+      case 'KeyQ': this.keys.rollLeft = true; break;
+      case 'KeyE': this.keys.rollRight = true; break;
+      case 'KeyV': this.cameraMode = this.cameraMode === 'third' ? 'first' : 'third'; break;
+      case 'KeyX': this.keys.level = true; break; // Auto-level
       case 'KeyC': this.isCruise = !this.isCruise; break;
       case 'KeyI': this.toggleLegend(); break;
       case 'ArrowUp': this.keys.up = true; break;
@@ -158,6 +164,7 @@ export class Player {
       case 'KeyD': this.keys.right = false; break;
       case 'KeyQ': this.keys.rollLeft = false; break;
       case 'KeyE': this.keys.rollRight = false; break;
+      case 'KeyX': this.keys.level = false; break;
       case 'ArrowUp': this.keys.up = false; break;
       case 'ArrowDown': this.keys.down = false; break;
       case 'ShiftLeft': case 'ShiftRight': this.keys.boost = false; break;
@@ -176,8 +183,7 @@ export class Player {
     if (nextPlanet) {
       this.isWarping = true;
       this.warpTarget = nextPlanet.mesh.position.clone().add(new THREE.Vector3(0, 100, -400));
-      if (this.audioStarted) { this.engineFilter.frequency.setTargetAtTime(8000, this.audioCtx.currentTime, 0.1); this.gainNode.gain.setTargetAtTime(0.8, this.audioCtx.currentTime, 0.1); }
-      setTimeout(() => { this.mesh.position.copy(this.warpTarget); this.velocity.set(0, 0, 50); this.isWarping = false; if (this.audioStarted) { this.engineFilter.frequency.setTargetAtTime(200, this.audioCtx.currentTime, 0.5); this.gainNode.gain.setTargetAtTime(0.2, this.audioCtx.currentTime, 0.5); } }, 1000);
+      setTimeout(() => { this.mesh.position.copy(this.warpTarget); this.velocity.set(0, 0, 50); this.isWarping = false; }, 1000);
     }
   }
 
@@ -188,21 +194,23 @@ export class Player {
     this.checkCollisions();
     this.updateAtmosphereEffect();
 
-    // ROTAZIONE PROFESSIONALE (QUATERNIONS)
+    this.shieldMat.opacity = THREE.MathUtils.lerp(this.shieldMat.opacity, 0, 0.05);
+
+    // ROTAZIONE PROFESSIONALE
     const pitch = (this.keys.up ? 1 : 0) - (this.keys.down ? 1 : 0);
     const yaw = (this.keys.left ? 1 : 0) - (this.keys.right ? 1 : 0);
     const roll = (this.keys.rollLeft ? 1 : 0) - (this.keys.rollRight ? 1 : 0);
-
-    // Applichiamo le rotazioni rispetto agli assi locali della nave
     if (pitch !== 0) this.mesh.rotateX(pitch * this.pitchSpeed * delta);
     if (yaw !== 0) this.mesh.rotateY(yaw * this.yawSpeed * delta);
     if (roll !== 0) this.mesh.rotateZ(roll * this.rollSpeed * delta);
 
-    // Auto-roll visivo leggero durante lo yaw (senza influenzare il quaternione permanente)
-    const visualRoll = THREE.MathUtils.lerp(0, yaw * 0.4, 0.1);
-    // Nota: preferiamo lasciare il rollio manuale puro per evitare confusioni nell'input
+    // AUTO-LEVELING LOGIC (X KEY)
+    if (this.keys.level) {
+      const targetQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, this.mesh.rotation.y, 0));
+      this.mesh.quaternion.slerp(targetQuat, 0.1);
+    }
 
-    // FISICA & TURBO
+    // FISICA
     this.isTurbo = this.keys.boost && this.turboEnergy > 0;
     if (this.isTurbo) { this.turboEnergy -= 35 * delta; } else { this.turboEnergy = Math.min(100, this.turboEnergy + 25 * delta); }
     if (this.turboFill) this.turboFill.style.width = `${this.turboEnergy}%`;
@@ -214,29 +222,38 @@ export class Player {
     if (this.keys.forward) this.velocity.addScaledVector(direction, currentAccel * delta);
     if (this.keys.backward) this.velocity.addScaledVector(direction, -currentAccel * delta);
 
-    if (this.isCruise && this.velocity.length() < 30) { this.velocity.addScaledVector(direction, this.baseAcceleration * 0.5 * delta); }
+    if (this.isCruise && this.velocity.length() < 40) { this.velocity.addScaledVector(direction, this.baseAcceleration * 0.5 * delta); }
     this.mesh.position.add(this.velocity.clone().multiplyScalar(delta));
-    const currentDecel = this.isCruise ? 0.998 : this.deceleration;
-    this.velocity.multiplyScalar(currentDecel);
+    this.velocity.multiplyScalar(this.isCruise ? 0.998 : this.deceleration);
 
     this.updateRibbonTrails();
     this.updateRadar();
 
     // UI & Audio
     const speedKmh = Math.round(this.velocity.length() * 10);
-    if (this.speedDisplay) { this.speedDisplay.innerText = speedKmh.toString().padStart(3, '0'); this.speedDisplay.style.color = this.isCruise ? '#ffaa00' : '#00ffff'; }
+    if (this.speedDisplay) { this.speedDisplay.innerText = speedKmh.toString().padStart(3, '0'); }
+
     if (this.audioStarted && !this.isWarping) {
       const speedFactor = Math.min(1, this.velocity.length() / 150);
       this.engineFilter.frequency.setTargetAtTime(100 + speedFactor * 500 + (this.isTurbo ? 800 : 0), this.audioCtx.currentTime, 0.2);
       this.gainNode.gain.setTargetAtTime(0.1 + speedFactor * 0.4 + (this.isTurbo ? 0.4 : 0), this.audioCtx.currentTime, 0.2);
     }
+
+    // ANIMAZIONE MOTORI
+    const time = Date.now() * 0.005;
+    this.engineCores.forEach(core => {
+      const scaleFactor = (this.isTurbo ? 2.5 : 1) + Math.sin(time) * 0.1;
+      core.scale.set(scaleFactor, scaleFactor, scaleFactor);
+      core.material.opacity = 0.7 + Math.sin(time * 2) * 0.3;
+      core.material.color.setHex(this.isTurbo ? 0xffffff : 0x00ffff);
+    });
   }
 
   updateAtmosphereEffect() {
     const earth = this.planets.find(p => p.name === 'Terra');
     if (earth) {
       const dist = this.mesh.position.distanceTo(earth.mesh.position);
-      const intensity = Math.max(0, 1 - (dist - 150) / 200);
+      const intensity = Math.max(0, 1 - (dist - (earth.radius + 150)) / 200);
       if (intensity > 0) { this.nose.material.emissive.setHex(0xff3300); this.nose.material.emissiveIntensity = intensity * 5; } else { this.nose.material.emissive.setHex(0x00ffff); this.nose.material.emissiveIntensity = 0.05; }
     }
   }
@@ -245,9 +262,19 @@ export class Player {
     const shipPos = this.mesh.position;
     for (let asteroid of this.asteroids) {
       const dist = shipPos.distanceTo(asteroid.position);
-      const minCollideDist = 15 + asteroid.scale.x * 0.5;
-      if (dist < minCollideDist) { const bounceDir = shipPos.clone().sub(asteroid.position).normalize(); this.velocity.copy(bounceDir.multiplyScalar(40)); this.showWarning(); return; }
+      if (dist < (15 + asteroid.scale.x * 0.5)) { this.handleCollision(asteroid.position); return; }
     }
+    for (let p of this.planets) {
+      const dist = shipPos.distanceTo(p.mesh.position);
+      if (dist < (p.radius + 10)) { this.handleCollision(p.mesh.position); return; }
+    }
+  }
+
+  handleCollision(objectPos) {
+    const bounceDir = this.mesh.position.clone().sub(objectPos).normalize();
+    this.velocity.copy(bounceDir.multiplyScalar(50));
+    this.shieldMat.opacity = 0.8;
+    this.showWarning();
   }
 
   showWarning() { if (this.warningHUD) { this.warningHUD.style.display = 'block'; setTimeout(() => { this.warningHUD.style.display = 'none'; }, 1000); } }
@@ -265,7 +292,7 @@ export class Player {
     const dots = this.radar.querySelectorAll('.radar-dot'); dots.forEach(d => d.remove());
     this.planets.forEach(p => {
       const relPos = p.mesh.position.clone().sub(this.mesh.position); const dist = relPos.length();
-      if (dist < 40000) { const x = (relPos.x / 40000) * 75 + 75; const y = (relPos.z / 40000) * 75 + 75; const dot = document.createElement('div'); dot.className = 'radar-dot'; dot.style.cssText = `position:absolute;left:${x}px;top:${y}px;width:5px;height:5px;background:#00ffff;border-radius:50%;box-shadow:0 0 8px #00ffff;`; this.radar.appendChild(dot); }
+      if (dist < 50000) { const x = (relPos.x / 50000) * 75 + 75; const y = (relPos.z / 50000) * 75 + 75; const dot = document.createElement('div'); dot.className = 'radar-dot'; dot.style.cssText = `position:absolute;left:${x}px;top:${y}px;width:5px;height:5px;background:#00ffff;border-radius:50%;box-shadow:0 0 8px #00ffff;`; this.radar.appendChild(dot); }
     });
   }
 }

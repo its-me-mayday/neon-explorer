@@ -1,13 +1,12 @@
 import * as THREE from 'three';
 
 export function setupEnvironment(scene) {
-  // 1. STARFIELD DINAMICO E INFINITO
+  // 1. STARFIELD DINAMICO
   const starsGeo = new THREE.BufferGeometry();
   const starsCount = 20000;
   const positions = new Float32Array(starsCount * 3);
   for (let i = 0; i < starsCount * 3; i++) {
-    // Distribuzione su una sfera molto più grande
-    const r = 20000 + Math.random() * 30000;
+    const r = 25000 + Math.random() * 30000;
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos(2 * Math.random() - 1);
     positions[i*3] = r * Math.sin(phi) * Math.cos(theta);
@@ -15,8 +14,7 @@ export function setupEnvironment(scene) {
     positions[i*3+2] = r * Math.cos(phi);
   }
   starsGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  const starsMat = new THREE.PointsMaterial({ size: 2, color: 0xffffff, sizeAttenuation: false, transparent: true, opacity: 0.8 });
-  const starField = new THREE.Points(starsGeo, starsMat);
+  const starField = new THREE.Points(starsGeo, new THREE.PointsMaterial({ size: 2, color: 0xffffff, sizeAttenuation: false, transparent: true, opacity: 0.8 }));
   scene.add(starField);
 
   // TEXTURES PIANETI
@@ -48,33 +46,51 @@ export function setupEnvironment(scene) {
       const rings = new THREE.Mesh(new THREE.TorusGeometry(radius * 2, radius * 0.1, 2, 100), new THREE.MeshStandardMaterial({ color: 0x887766, transparent: true, opacity: 0.6 }));
       rings.rotation.x = Math.PI / 2.5; planet.add(rings);
     }
-    return { name, mesh: planet, rotationSpeed: (Math.random() * 0.005) + 0.001 };
+    return { name, mesh: planet, radius, rotationSpeed: (Math.random() * 0.005) + 0.001 };
   };
 
-  planets.push(createPlanet('Sole', 200, 'sun', -2000));
+  planets.push(createPlanet('Sole', 250, 'sun', -2500));
   planets.push(createPlanet('Mercurio', 5, 'grey', 1200));
   planets.push(createPlanet('Venere', 12, 'jupiter', 2500));
-  planets.push(createPlanet('Terra', 12.5, 'earth', 4000));
-  planets.push(createPlanet('Marte', 6.5, 'mars', 6500));
-  planets.push(createPlanet('Giove', 65, 'jupiter', 15000));
-  planets.push(createPlanet('Saturno', 55, 'saturn', 25000, true));
-  planets.push(createPlanet('Urano', 25, 'jupiter', 35000));
-  planets.push(createPlanet('Nettuno', 24, 'jupiter', 45000));
+  planets.push(createPlanet('Terra', 12.5, 'earth', 4500));
+  planets.push(createPlanet('Marte', 6.5, 'mars', 7000));
+  planets.push(createPlanet('Giove', 75, 'jupiter', 16000));
+  planets.push(createPlanet('Saturno', 65, 'saturn', 26000, true));
 
+  // ASTEROIDS
   const asteroids = [];
   const asteroidGeo = new THREE.DodecahedronGeometry(1, 1);
   const asteroidMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.9 });
   for (let i = 0; i < 1500; i++) {
     const asteroid = new THREE.Mesh(asteroidGeo, asteroidMat);
-    const dist = 8000 + Math.random() * 5000;
+    const dist = 8000 + Math.random() * 6000;
     const angle = Math.random() * Math.PI * 2;
-    const radius = 500 + Math.random() * 4000;
-    asteroid.position.set(Math.cos(angle) * radius, (Math.random() - 0.5) * 1000, dist);
-    const scale = 2 + Math.random() * 12;
+    const radius = 500 + Math.random() * 5000;
+    asteroid.position.set(Math.cos(angle) * radius, (Math.random() - 0.5) * 1200, dist);
+    const scale = 2 + Math.random() * 15;
     asteroid.scale.set(scale, scale, scale);
     scene.add(asteroid);
     asteroids.push(asteroid);
   }
 
-  return { starField, planets, asteroids };
+  // --- ALIENI (UFOs) ---
+  const aliens = [];
+  const alienGeo = new THREE.OctahedronGeometry(4, 0);
+  const alienMat = new THREE.MeshStandardMaterial({ color: 0xaa00ff, emissive: 0xaa00ff, emissiveIntensity: 2 });
+  for (let i = 0; i < 15; i++) {
+    const alien = new THREE.Mesh(alienGeo, alienMat);
+    // Posizioniamo gli alieni vicino ai pianeti esterni
+    const planet = planets[Math.floor(Math.random() * (planets.length - 3)) + 3];
+    alien.position.copy(planet.mesh.position).add(new THREE.Vector3(Math.random()*400-200, Math.random()*400-200, Math.random()*400-200));
+    scene.add(alien);
+    aliens.push({ 
+      mesh: alien, 
+      orbitRadius: 200 + Math.random() * 300, 
+      speed: (Math.random() * 0.02) + 0.01,
+      angle: Math.random() * Math.PI * 2,
+      planet: planet.mesh.position
+    });
+  }
+
+  return { starField, planets, asteroids, aliens };
 }
