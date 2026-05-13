@@ -10,13 +10,11 @@ export class Player {
     this.darkSteelMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 1.0, roughness: 0.3 });
     this.softGlowMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.8 });
 
-    // COSTRUZIONE NAVE (Modello Wraith Interceptor)
     this.buildShip();
-    
     this.mesh.position.y = 1;
     this.scene.add(this.mesh);
 
-    // MOVIMENTO & TURBO
+    // MOVIMENTO
     this.velocity = new THREE.Vector3();
     this.rotationSpeed = 3.8;
     this.baseAcceleration = 50;
@@ -25,7 +23,7 @@ export class Player {
     this.isTurbo = false;
     this.turboEnergy = 100;
 
-    // SCIE (Trails)
+    // SCIE
     this.trails = [];
     this.trailTimer = 0;
 
@@ -33,11 +31,10 @@ export class Player {
     window.addEventListener('keydown', (e) => this.onKeyDown(e));
     window.addEventListener('keyup', (e) => this.onKeyUp(e));
 
-    // UI
     this.speedDisplay = document.getElementById('speed-display');
     this.turboFill = document.getElementById('turbo-fill');
 
-    // AUDIO
+    // NUOVO AUDIO (White Noise Based)
     this.setupAudio();
   }
 
@@ -46,47 +43,36 @@ export class Player {
     const nose = new THREE.Mesh(noseGeo, this.steelMat);
     nose.rotation.x = Math.PI / 2; nose.position.z = 1.2;
     this.mesh.add(nose);
-
     const bodyGeo = new THREE.BoxGeometry(0.6, 0.4, 1.5);
     const body = new THREE.Mesh(bodyGeo, this.steelMat);
     this.mesh.add(body);
-
     const backGeo = new THREE.BoxGeometry(0.8, 0.5, 1);
     const back = new THREE.Mesh(backGeo, this.darkSteelMat);
     back.position.z = -0.8;
     this.mesh.add(back);
-
     const cockpitGeo = new THREE.SphereGeometry(0.35, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2);
     const cockpitMat = new THREE.MeshStandardMaterial({ color: 0x001111, emissive: 0x00ffff, emissiveIntensity: 0.5, transparent: true, opacity: 0.7 });
     this.cockpit = new THREE.Mesh(cockpitGeo, cockpitMat);
     this.cockpit.position.set(0, 0.2, 0.4);
     this.cockpit.scale.set(1, 0.6, 1.5);
     this.mesh.add(this.cockpit);
-
     const wingShape = new THREE.Shape();
     wingShape.moveTo(0, 0); wingShape.lineTo(2.2, -1.2); wingShape.lineTo(2.2, 0.6); wingShape.lineTo(0, 1.2); wingShape.lineTo(0, 0);
     const extrudeSettings = { depth: 0.08, bevelEnabled: true, bevelThickness: 0.05 };
     const wingGeo = new THREE.ExtrudeGeometry(wingShape, extrudeSettings);
-    
     const leftWing = new THREE.Mesh(wingGeo, this.steelMat);
-    leftWing.rotation.x = Math.PI / 2;
-    leftWing.position.set(-0.3, 0, 0.5);
+    leftWing.rotation.x = Math.PI / 2; leftWing.position.set(-0.3, 0, 0.5);
     this.mesh.add(leftWing);
-
     const rightWing = leftWing.clone();
-    rightWing.scale.x = -1;
-    rightWing.position.x = 0.3;
+    rightWing.scale.x = -1; rightWing.position.x = 0.3;
     this.mesh.add(rightWing);
-
     this.engines = [];
     const engineGeo = new THREE.CylinderGeometry(0.18, 0.25, 0.9, 16);
     this.enginePositions = [{x:-0.6,y:-0.15,z:-1},{x:0.6,y:-0.15,z:-1},{x:-1.3,y:-0.1,z:-0.3},{x:1.3,y:-0.1,z:-0.3}];
     this.enginePositions.forEach(pos => {
       const engine = new THREE.Mesh(engineGeo, this.darkSteelMat);
-      engine.rotation.x = Math.PI / 2;
-      engine.position.set(pos.x, pos.y, pos.z);
+      engine.rotation.x = Math.PI / 2; engine.position.set(pos.x, pos.y, pos.z);
       this.mesh.add(engine);
-
       const eGlowGeo = new THREE.SphereGeometry(0.15, 12, 12);
       const eGlow = new THREE.Mesh(eGlowGeo, this.softGlowMat.clone());
       eGlow.position.set(pos.x, pos.y, pos.z - 0.5);
@@ -97,20 +83,36 @@ export class Player {
 
   setupAudio() {
     this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    this.oscillator = this.audioCtx.createOscillator();
+    
+    // Generatore di Rumore Bianco
+    const bufferSize = 2 * this.audioCtx.sampleRate;
+    const noiseBuffer = this.audioCtx.createBuffer(1, bufferSize, this.audioCtx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      output[i] = Math.random() * 2 - 1;
+    }
+
+    this.noiseSource = this.audioCtx.createBufferSource();
+    this.noiseSource.buffer = noiseBuffer;
+    this.noiseSource.loop = true;
+
+    // Filtro per il rombo del motore (Passa-Basso)
+    this.engineFilter = this.audioCtx.createBiquadFilter();
+    this.engineFilter.type = 'lowpass';
+    this.engineFilter.frequency.setValueAtTime(100, this.audioCtx.currentTime);
+    this.engineFilter.Q.setValueAtTime(1, this.audioCtx.currentTime);
+
     this.gainNode = this.audioCtx.createGain();
-    
-    this.oscillator.type = 'sawtooth';
-    this.oscillator.frequency.setValueAtTime(40, this.audioCtx.currentTime);
     this.gainNode.gain.setValueAtTime(0, this.audioCtx.currentTime);
-    
-    this.oscillator.connect(this.gainNode);
+
+    // Connessione catena audio
+    this.noiseSource.connect(this.engineFilter);
+    this.engineFilter.connect(this.gainNode);
     this.gainNode.connect(this.audioCtx.destination);
-    
-    this.oscillator.start();
+
+    this.noiseSource.start();
     this.audioStarted = false;
 
-    // Start audio on first key press (browser requirement)
     window.addEventListener('keydown', () => {
       if (!this.audioStarted) {
         this.audioCtx.resume();
@@ -168,17 +170,21 @@ export class Player {
     const speedKmh = Math.round(this.velocity.length() * 10);
     if (this.speedDisplay) this.speedDisplay.innerText = speedKmh.toString().padStart(3, '0');
 
-    // SCIE (Trails)
-    this.updateTrails(delta);
-
-    // AUDIO UPDATE
+    // --- AUDIO UPDATE (PLEASANT WHITE NOISE) ---
     if (this.audioStarted) {
-      const speedFactor = this.velocity.length() / 20;
-      this.oscillator.frequency.setTargetAtTime(40 + speedFactor * 100 + (this.isTurbo ? 50 : 0), this.audioCtx.currentTime, 0.1);
-      this.gainNode.gain.setTargetAtTime(0.05 + speedFactor * 0.1, this.audioCtx.currentTime, 0.1);
+      const speedFactor = Math.min(1, this.velocity.length() / 100);
+      
+      // Il motore diventa più "aperto" (frequenze alte) mentre acceleri
+      const targetFreq = 50 + speedFactor * 400 + (this.isTurbo ? 600 : 0);
+      this.engineFilter.frequency.setTargetAtTime(targetFreq, this.audioCtx.currentTime, 0.2);
+      
+      // Volume più alto durante l'accelerazione o il turbo
+      const targetGain = 0.1 + speedFactor * 0.3 + (this.isTurbo ? 0.4 : 0);
+      this.gainNode.gain.setTargetAtTime(targetGain, this.audioCtx.currentTime, 0.2);
     }
 
-    // Visuals
+    this.updateTrails(delta);
+
     const time = Date.now() * 0.002;
     const turboScale = this.isTurbo ? 2.5 : 1;
     const turboColor = this.isTurbo ? 0xffffff : 0x00ffff;
@@ -198,34 +204,22 @@ export class Player {
     if (this.trailTimer > 0.05 && this.velocity.length() > 5) {
       this.enginePositions.forEach(pos => {
         const trailGeo = new THREE.SphereGeometry(0.1, 8, 8);
-        const trailMat = new THREE.MeshBasicMaterial({ 
-          color: this.isTurbo ? 0xffffff : 0x00ffff, 
-          transparent: true, 
-          opacity: 0.5 
-        });
+        const trailMat = new THREE.MeshBasicMaterial({ color: this.isTurbo ? 0xffffff : 0x00ffff, transparent: true, opacity: 0.5 });
         const trail = new THREE.Mesh(trailGeo, trailMat);
-        
-        // Posizione scia basata sulla posizione attuale dei motori
         const worldPos = new THREE.Vector3(pos.x, pos.y, pos.z - 0.5);
         worldPos.applyMatrix4(this.mesh.matrixWorld);
         trail.position.copy(worldPos);
-        
         this.scene.add(trail);
         this.trails.push({ mesh: trail, life: 1.0 });
       });
       this.trailTimer = 0;
     }
-
     for (let i = this.trails.length - 1; i >= 0; i--) {
       const t = this.trails[i];
       t.life -= delta * 2;
       t.mesh.scale.set(t.life, t.life, t.life);
       t.mesh.material.opacity = t.life * 0.5;
-      
-      if (t.life <= 0) {
-        this.scene.remove(t.mesh);
-        this.trails.splice(i, 1);
-      }
+      if (t.life <= 0) { this.scene.remove(t.mesh); this.trails.splice(i, 1); }
     }
   }
 }
